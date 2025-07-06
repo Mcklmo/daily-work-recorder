@@ -43,6 +43,7 @@ Create a `.env` file in the project root with the following variables:
 GITHUB_USERNAME=your_github_username
 GITHUB_TOKEN=your_github_personal_access_token
 GITHUB_ORG=your_organization_name
+GITHUB_REPO_FILTER=optional_comma_separated_repo_names
 ```
 
 **Example:**
@@ -51,7 +52,15 @@ GITHUB_ORG=your_organization_name
 GITHUB_USERNAME=mcklmo
 GITHUB_TOKEN=ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 GITHUB_ORG=BC-Technology
+GITHUB_REPO_FILTER=heads-backend,heads-frontend
 ```
+
+**Environment Variables:**
+
+- `GITHUB_USERNAME`: Your GitHub username
+- `GITHUB_TOKEN`: Your GitHub Personal Access Token
+- `GITHUB_ORG`: The organization name
+- `GITHUB_REPO_FILTER`: (Optional) Comma-separated list of repository names to filter for
 
 ## Usage
 
@@ -105,6 +114,44 @@ today = pendulum.now()
 last_week = today.subtract(weeks=1)
 period = last_week.date().period(today.date())
 ```
+
+### Repository Filtering
+
+You can filter for specific repositories instead of processing all organization repositories:
+
+```python
+# Filter for specific repositories
+tracker = GitHubActivityTracker(
+    github_token=os.getenv("GITHUB_TOKEN"),
+    org_name="your-org-name"
+)
+
+# Specify repositories to process
+repository_filter = ["heads-backend", "heads-frontend", "api-service"]
+
+report = tracker.get_github_daily_work(
+    username="your-username",
+    target_date_range=period,
+    repository_filter=repository_filter
+)
+```
+
+#### Environment Variable Configuration
+
+You can also set the repository filter via environment variables:
+
+```bash
+# In your .env file
+GITHUB_REPO_FILTER=heads-backend,heads-frontend,api-service
+```
+
+#### Default Repository Filter
+
+The script currently defaults to filtering for `heads-backend` and `heads-frontend`. To change this:
+
+1. **Edit the script directly**: Modify the `repository_filter` variable in the `main()` function
+2. **Use environment variables**: Set `GITHUB_REPO_FILTER` as shown above
+3. **Process all repositories**: Set `repository_filter = None` in the main function
 
 ## Output Format
 

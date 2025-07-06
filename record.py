@@ -4,42 +4,63 @@ import os
 from dotenv import load_dotenv
 import pendulum
 from typing import Dict, List, Any, Optional
+import json
 
 load_dotenv()
 
 
 class GitHubActivityTracker:
-    def __init__(self, github_token: str, org_name: str):
+    def __init__(self, github_token: str, org_name: str, debug: bool = False):
         self.github_token = github_token
         self.org_name = org_name
+        self.debug = debug
         self.base_url = "https://api.github.com"
         self.headers = {
             "Authorization": f"token {github_token}",
             "Accept": "application/vnd.github.v3+json",
         }
 
+    def debug_log(self, message: str, data: Any = None):
+        """Print debug information if debug mode is enabled"""
+        if self.debug:
+            print(f"[DEBUG] {message}")
+            if data is not None:
+                if isinstance(data, (dict, list)):
+                    print(f"[DEBUG] Data: {json.dumps(data, indent=2, default=str)}")
+                else:
+                    print(f"[DEBUG] Data: {data}")
+
     def get_org_repositories(self) -> List[Dict[str, Any]]:
         """Get all repositories from the organization"""
         repositories = []
         page = 1
 
+        self.debug_log(f"Fetching repositories from organization: {self.org_name}")
+
         while True:
             url = f"{self.base_url}/orgs/{self.org_name}/repos?per_page=100&page={page}&type=all"
+            self.debug_log(f"API Request: {url}")
+
             response = requests.get(url, headers=self.headers)
+            self.debug_log(f"Response status: {response.status_code}")
 
             if response.status_code != 200:
+                self.debug_log(f"Error response: {response.text}")
                 print(
                     f"Error fetching repositories: {response.status_code} - {response.text}"
                 )
                 break
 
             repos = response.json()
+            self.debug_log(f"Found {len(repos)} repositories on page {page}")
+
             if not repos:
                 break
 
             repositories.extend(repos)
             page += 1
 
+        self.debug_log(f"Total repositories found: {len(repositories)}")
         return repositories
 
     def get_commits_for_repo(
@@ -48,6 +69,10 @@ class GitHubActivityTracker:
         """Get commits for a specific repository within date range"""
         commits = []
         page = 1
+
+        self.debug_log(f"Fetching commits for repository: {repo_name}")
+        self.debug_log(f"Date range: {since} to {until}")
+        self.debug_log(f"Author: {username}")
 
         while True:
             url = f"{self.base_url}/repos/{self.org_name}/{repo_name}/commits"
@@ -59,23 +84,69 @@ class GitHubActivityTracker:
                 "page": page,
             }
 
+            self.debug_log(f"API Request: {url}")
+            self.debug_log(f"Params: {params}")
+
             response = requests.get(url, headers=self.headers, params=params)
+            self.debug_log(f"Response status: {response.status_code}")
 
             if response.status_code != 200:
                 if response.status_code == 409:  # Repository is empty
+                    self.debug_log("Repository is empty")
                     break
+                self.debug_log(f"Error response: {response.text}")
                 print(
                     f"Error fetching commits for {repo_name}: {response.status_code} - {response.text}"
                 )
                 break
 
             repo_commits = response.json()
+            self.debug_log(f"Found {len(repo_commits)} commits on page {page}")
+
+            if repo_commits and self.debug:
+                # Show first few commits for debugging
+                self.debug_log(f"Sample commits from {repo_name}:")
+                for i, commit in enumerate(repo_commits[:3]):  # Show first 3 commits
+                    commit_data = {
+                        "sha": commit.get("sha", "")[:7],
+                        "message": commit.get("commit", {}).get("message", "")[:50],
+                        "author_name": commit.get("commit", {})
+                        .get("author", {})
+                        .get("name", ""),
+                        "author_email": commit.get("commit", {})
+                        .get("author", {})
+                        .get("email", ""),
+                        "author_date": commit.get("commit", {})
+                        .get("author", {})
+                        .get("date", ""),
+                        "committer_name": commit.get("commit", {})
+                        .get("committer", {})
+                        .get("name", ""),
+                        "committer_email": commit.get("commit", {})
+                        .get("committer", {})
+                        .get("email", ""),
+                        "committer_date": commit.get("commit", {})
+                        .get("committer", {})
+                        .get("date", ""),
+                    }
+                    self.debug_log(f"  Commit {i+1}: {commit_data}")
+
+                    # Check if this commit falls within our date range
+                    commit_date = pendulum.parse(commit_data["author_date"])
+                    since_date = pendulum.parse(since)
+                    until_date = pendulum.parse(until)
+                    in_range = since_date <= commit_date <= until_date
+                    self.debug_log(
+                        f"    Date check: {commit_date} is {'IN' if in_range else 'NOT IN'} range ({since_date} to {until_date})"
+                    )
+
             if not repo_commits:
                 break
 
             commits.extend(repo_commits)
             page += 1
 
+        self.debug_log(f"Total commits found for {repo_name}: {len(commits)}")
         return commits
 
     def get_pull_requests_for_repo(
@@ -242,23 +313,77 @@ class GitHubActivityTracker:
         self,
         username: str,
         target_date_range: pendulum.Interval,
+        repository_filter: Optional[List[str]] = None,
     ) -> str:
-        """Generate a comprehensive daily work summary"""
+        """Generate a comprehensive daily work summary
+
+        Args:
+            username: GitHub username to track
+            target_date_range: Date range for the report
+            repository_filter: Optional list of repository names to filter for (e.g., ["heads-backend", "heads-frontend"])
+        """
         since = target_date_range.start.to_iso8601_string()
         until = target_date_range.end.to_iso8601_string()
 
+        self.debug_log(f"Starting get_github_daily_work for user: {username}")
+        self.debug_log(
+            f"Date range: {target_date_range.start} to {target_date_range.end}"
+        )
+        self.debug_log(f"Since (ISO): {since}")
+        self.debug_log(f"Until (ISO): {until}")
+        self.debug_log(f"Repository filter: {repository_filter}")
+
         # Get all organization repositories
         print(f"Fetching repositories from organization: {self.org_name}")
-        repositories = self.get_org_repositories()
+        all_repositories = self.get_org_repositories()
 
-        if not repositories:
+        if not all_repositories:
             return (
                 "No repositories found in the organization or insufficient permissions."
             )
 
+        # Filter repositories if filter is provided
+        if repository_filter:
+            repositories = [
+                repo for repo in all_repositories if repo["name"] in repository_filter
+            ]
+            print(f"Filtering for repositories: {repository_filter}")
+            print(
+                f"Found {len(repositories)} out of {len(all_repositories)} repositories"
+            )
+
+            self.debug_log(f"Filtered repositories found:")
+            for repo in repositories:
+                self.debug_log(f"  - {repo['name']} (full_name: {repo['full_name']})")
+
+            # Check if any filtered repositories were not found
+            found_repo_names = [repo["name"] for repo in repositories]
+            missing_repos = [
+                name for name in repository_filter if name not in found_repo_names
+            ]
+            if missing_repos:
+                print(
+                    f"Warning: The following repositories were not found: {missing_repos}"
+                )
+                self.debug_log(f"Missing repositories: {missing_repos}")
+        else:
+            repositories = all_repositories
+            print(f"Processing all {len(repositories)} repositories")
+
+        if not repositories:
+            if repository_filter:
+                return f"No repositories found matching the filter: {repository_filter}"
+            else:
+                return "No repositories found in the organization."
+
         daily_work_summary = f"# GitHub Activity Report for {username}\n"
         daily_work_summary += f"**Organization:** {self.org_name}\n"
-        daily_work_summary += f"**Period:** {target_date_range.start.format('YYYY-MM-DD')} to {target_date_range.end.format('YYYY-MM-DD')}\n\n"
+        daily_work_summary += f"**Period:** {target_date_range.start.format('YYYY-MM-DD')} to {target_date_range.end.format('YYYY-MM-DD')}\n"
+
+        if repository_filter:
+            daily_work_summary += f"**Repositories:** {', '.join(repository_filter)}\n"
+
+        daily_work_summary += "\n"
 
         total_commits = 0
         total_prs_created = 0
@@ -271,6 +396,9 @@ class GitHubActivityTracker:
             repo_full_name = repo["full_name"]
 
             print(f"Processing repository: {repo_name}")
+            self.debug_log(
+                f"Processing repository: {repo_name} (full_name: {repo_full_name})"
+            )
 
             # Get commits
             commits = self.get_commits_for_repo(repo_name, username, since, until)
@@ -280,6 +408,13 @@ class GitHubActivityTracker:
 
             # Get PR comments
             comments = self.get_pr_comments_for_repo(repo_name, username, since, until)
+
+            self.debug_log(f"Repository {repo_name} results:")
+            self.debug_log(f"  - Commits: {len(commits)}")
+            self.debug_log(f"  - PRs created: {len(prs['created'])}")
+            self.debug_log(f"  - PRs merged: {len(prs['merged'])}")
+            self.debug_log(f"  - PRs reviewed: {len(prs['reviewed'])}")
+            self.debug_log(f"  - Comments: {len(comments)}")
 
             # Only include repository in report if there's activity
             if (
@@ -387,6 +522,19 @@ def main():
     GITHUB_USERNAME = os.getenv("GITHUB_USERNAME", "mcklmo")
     GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
     ORG_NAME = os.getenv("GITHUB_ORG", "BC-Technology")
+    DEBUG = os.getenv("DEBUG", "true").lower() == "true"  # Enable debug by default
+
+    # Repository filter - can be set via environment variable or hardcoded
+    REPO_FILTER = os.getenv("GITHUB_REPO_FILTER")  # Comma-separated list
+    if REPO_FILTER:
+        repository_filter = [repo.strip() for repo in REPO_FILTER.split(",")]
+    else:
+        # Set to None to process all repositories, or specify a list to filter
+        # Example: repository_filter = ["heads-backend", "heads-frontend"]
+        repository_filter = [
+            "heads-backend",
+            # "heads-frontend",
+        ]  # Default filter for testing
 
     if not GITHUB_TOKEN:
         print("Error: GITHUB_TOKEN environment variable not set.")
@@ -394,27 +542,40 @@ def main():
         print("Required scopes: repo, read:org, read:user")
         exit(1)
 
-    # Initialize the tracker
-    tracker = GitHubActivityTracker(GITHUB_TOKEN, ORG_NAME)
+    # Initialize the tracker with debug mode
+    tracker = GitHubActivityTracker(GITHUB_TOKEN, ORG_NAME, debug=DEBUG)
 
-    # Example usage for a specific day
-    today = pendulum.now()
-    yesterday = today.subtract(days=1)
+    # Fix the date range issue - the original code had swapped start/end dates
+    today = pendulum.now().start_of("month")
+    yesterday = today.end_of("month")
 
     # Create a period for the last day
     period = pendulum.interval(yesterday, today)
 
+    # Debug information
+    print(f"[DEBUG] Today: {today}")
+    print(f"[DEBUG] Yesterday: {yesterday}")
+    print(f"[DEBUG] Period start: {period.start}")
+    print(f"[DEBUG] Period end: {period.end}")
+    print(f"[DEBUG] Period duration: {period.in_words()}")
+
     print(f"Generating GitHub activity report for {GITHUB_USERNAME} in {ORG_NAME}")
     print(
-        f"Period: {period.start.format('YYYY-MM-DD')} to {period.end.format('YYYY-MM-DD')}"
+        f"Period: {period.start.format('YYYY-MM-DD HH:mm:ss')} to {period.end.format('YYYY-MM-DD HH:mm:ss')}"
     )
 
-    report = tracker.get_github_daily_work(GITHUB_USERNAME, period)
+    if repository_filter:
+        print(f"Repository filter: {repository_filter}")
+    else:
+        print("Processing all repositories in the organization")
+
+    report = tracker.get_github_daily_work(GITHUB_USERNAME, period, repository_filter)
     print("\n" + "=" * 80)
     print(report)
 
     # Save report to file
-    filename = f"github_report_{period.start.format('YYYY-MM-DD')}_to_{period.end.format('YYYY-MM-DD')}.md"
+    filter_suffix = "_filtered" if repository_filter else ""
+    filename = f"github_report_{period.start.format('YYYY-MM-DD')}_to_{period.end.format('YYYY-MM-DD')}{filter_suffix}.md"
     with open(filename, "w") as f:
         f.write(report)
     print(f"\nReport saved to: {filename}")
