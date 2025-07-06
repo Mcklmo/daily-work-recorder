@@ -128,25 +128,27 @@ class GitHubActivityTracker:
         self, repo_name: str, username: str, since: str, until: str
     ) -> List[Dict[str, Any]]:
         """Get commits for a specific repository within date range"""
-        commits = []
+        all_commits = []
+        filtered_commits = []
         page = 1
 
         self.debug_log(f"Fetching commits for repository: {repo_name}")
         self.debug_log(f"Date range: {since} to {until}")
-        self.debug_log(f"Author: {username}")
+        self.debug_log(f"Target user: {username}")
 
         # First, check what commits exist in the repository (for debugging)
         self.debug_recent_commits(repo_name, since, until)
 
+        # Fetch all commits in date range (without author filtering)
         while True:
             url = f"{self.base_url}/repos/{self.org_name}/{repo_name}/commits"
             params = {
-                "author": username,
                 "since": since,
                 "until": until,
                 "per_page": 100,
                 "page": page,
             }
+            # Removed 'author' parameter to get all commits
 
             self.debug_log(f"API Request: {url}")
             self.debug_log(f"Params: {params}")
@@ -167,51 +169,78 @@ class GitHubActivityTracker:
             repo_commits = response.json()
             self.debug_log(f"Found {len(repo_commits)} commits on page {page}")
 
-            if repo_commits and self.debug:
-                # Show first few commits for debugging
-                self.debug_log(f"Sample commits from {repo_name}:")
-                for i, commit in enumerate(repo_commits[:3]):  # Show first 3 commits
-                    commit_data = {
-                        "sha": commit.get("sha", "")[:7],
-                        "message": commit.get("commit", {}).get("message", "")[:50],
-                        "author_name": commit.get("commit", {})
-                        .get("author", {})
-                        .get("name", ""),
-                        "author_email": commit.get("commit", {})
-                        .get("author", {})
-                        .get("email", ""),
-                        "author_date": commit.get("commit", {})
-                        .get("author", {})
-                        .get("date", ""),
-                        "committer_name": commit.get("commit", {})
-                        .get("committer", {})
-                        .get("name", ""),
-                        "committer_email": commit.get("commit", {})
-                        .get("committer", {})
-                        .get("email", ""),
-                        "committer_date": commit.get("commit", {})
-                        .get("committer", {})
-                        .get("date", ""),
-                    }
-                    self.debug_log(f"  Commit {i+1}: {commit_data}")
-
-                    # Check if this commit falls within our date range
-                    commit_date = pendulum.parse(commit_data["author_date"])
-                    since_date = pendulum.parse(since)
-                    until_date = pendulum.parse(until)
-                    in_range = since_date <= commit_date <= until_date
-                    self.debug_log(
-                        f"    Date check: {commit_date} is {'IN' if in_range else 'NOT IN'} range ({since_date} to {until_date})"
-                    )
-
             if not repo_commits:
                 break
 
-            commits.extend(repo_commits)
+            all_commits.extend(repo_commits)
             page += 1
 
-        self.debug_log(f"Total commits found for {repo_name}: {len(commits)}")
-        return commits
+        # Now filter commits locally by matching various author identifiers
+        self.debug_log(f"Total commits fetched: {len(all_commits)}")
+        self.debug_log(f"Filtering commits locally for user: {username}")
+
+        for commit in all_commits:
+            commit_data = commit.get("commit", {})
+            author_info = commit_data.get("author", {})
+            committer_info = commit_data.get("committer", {})
+
+            # Get various identifiers
+            author_name = author_info.get("name", "").lower()
+            author_email = author_info.get("email", "").lower()
+            committer_name = committer_info.get("name", "").lower()
+            committer_email = committer_info.get("email", "").lower()
+
+            # GitHub user info (if available)
+            github_author = (
+                commit.get("author", {}).get("login", "").lower()
+                if commit.get("author")
+                else ""
+            )
+            github_committer = (
+                commit.get("committer", {}).get("login", "").lower()
+                if commit.get("committer")
+                else ""
+            )
+
+            # Flexible matching criteria
+            username_lower = username.lower()
+            is_match = False
+            match_reason = ""
+
+            # Match by GitHub username
+            if github_author == username_lower or github_committer == username_lower:
+                is_match = True
+                match_reason = f"GitHub username ({github_author or github_committer})"
+
+            # Match by commit author/committer name
+            elif author_name == username_lower or committer_name == username_lower:
+                is_match = True
+                match_reason = f"Git name ({author_name or committer_name})"
+
+            # Match by email patterns (flexible matching for common variations)
+            elif (
+                username_lower in author_email
+                or username_lower in committer_email
+                or author_email.startswith(username_lower)
+                or committer_email.startswith(username_lower)
+            ):
+                is_match = True
+                match_reason = f"Email pattern ({author_email or committer_email})"
+
+            if is_match:
+                filtered_commits.append(commit)
+                self.debug_log(
+                    f"Matched commit {commit.get('sha', '')[:7]}: {match_reason}"
+                )
+            else:
+                self.debug_log(
+                    f"Skipped commit {commit.get('sha', '')[:7]}: author='{author_name}', email='{author_email}', github='{github_author}'"
+                )
+
+        self.debug_log(
+            f"Total commits found for {repo_name} after filtering: {len(filtered_commits)}"
+        )
+        return filtered_commits
 
     def get_pull_requests_for_repo(
         self, repo_name: str, username: str, since: str, until: str
