@@ -5,8 +5,21 @@ from dotenv import load_dotenv
 import pendulum
 from typing import Dict, List, Any, Optional
 import json
+import logging
 
 load_dotenv()
+
+logger = logging.getLogger(__name__)
+
+# configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+)
+
+
+def print(message: str):
+    logger.info(message)
 
 
 class GitHubActivityTracker:
@@ -496,26 +509,26 @@ class GitHubActivityTracker:
             # Get commits
             commits = self.get_commits_for_repo(repo_name, username, since, until)
 
-            # Get pull requests
-            prs = self.get_pull_requests_for_repo(repo_name, username, since, until)
+            # # Get pull requests
+            # prs = self.get_pull_requests_for_repo(repo_name, username, since, until)
 
-            # Get PR comments
-            comments = self.get_pr_comments_for_repo(repo_name, username, since, until)
+            # # Get PR comments
+            # comments = self.get_pr_comments_for_repo(repo_name, username, since, until)
 
             self.debug_log(f"Repository {repo_name} results:")
             self.debug_log(f"  - Commits: {len(commits)}")
-            self.debug_log(f"  - PRs created: {len(prs['created'])}")
-            self.debug_log(f"  - PRs merged: {len(prs['merged'])}")
-            self.debug_log(f"  - PRs reviewed: {len(prs['reviewed'])}")
-            self.debug_log(f"  - Comments: {len(comments)}")
+            # self.debug_log(f"  - PRs created: {len(prs['created'])}")
+            # self.debug_log(f"  - PRs merged: {len(prs['merged'])}")
+            # self.debug_log(f"  - PRs reviewed: {len(prs['reviewed'])}")
+            # self.debug_log(f"  - Comments: {len(comments)}")
 
             # Only include repository in report if there's activity
             if (
                 commits
-                or prs["created"]
-                or prs["merged"]
-                or prs["reviewed"]
-                or comments
+                # or prs["created"]
+                # or prs["merged"]
+                # or prs["reviewed"]
+                # or comments
             ):
                 daily_work_summary += f"## Repository: {repo_name}\n\n"
 
@@ -533,64 +546,64 @@ class GitHubActivityTracker:
                     daily_work_summary += "\n"
                     total_commits += len(commits)
 
-                if prs["created"]:
-                    daily_work_summary += (
-                        f"### Pull Requests Created ({len(prs['created'])})\n\n"
-                    )
-                    for pr in prs["created"]:
-                        pr_url = (
-                            f"https://github.com/{repo_full_name}/pull/{pr['number']}"
-                        )
-                        daily_work_summary += (
-                            f"- **#{pr['number']}**: {pr['title']} ([Link]({pr_url}))\n"
-                        )
-                    daily_work_summary += "\n"
-                    total_prs_created += len(prs["created"])
+                # if prs["created"]:
+                #     daily_work_summary += (
+                #         f"### Pull Requests Created ({len(prs['created'])})\n\n"
+                #     )
+                #     for pr in prs["created"]:
+                #         pr_url = (
+                #             f"https://github.com/{repo_full_name}/pull/{pr['number']}"
+                #         )
+                #         daily_work_summary += (
+                #             f"- **#{pr['number']}**: {pr['title']} ([Link]({pr_url}))\n"
+                #         )
+                #     daily_work_summary += "\n"
+                #     total_prs_created += len(prs["created"])
 
-                if prs["merged"]:
-                    daily_work_summary += (
-                        f"### Pull Requests Merged ({len(prs['merged'])})\n\n"
-                    )
-                    for pr in prs["merged"]:
-                        pr_url = (
-                            f"https://github.com/{repo_full_name}/pull/{pr['number']}"
-                        )
-                        daily_work_summary += (
-                            f"- **#{pr['number']}**: {pr['title']} ([Link]({pr_url}))\n"
-                        )
-                    daily_work_summary += "\n"
-                    total_prs_merged += len(prs["merged"])
+                # if prs["merged"]:
+                #     daily_work_summary += (
+                #         f"### Pull Requests Merged ({len(prs['merged'])})\n\n"
+                #     )
+                #     for pr in prs["merged"]:
+                #         pr_url = (
+                #             f"https://github.com/{repo_full_name}/pull/{pr['number']}"
+                #         )
+                #         daily_work_summary += (
+                #             f"- **#{pr['number']}**: {pr['title']} ([Link]({pr_url}))\n"
+                #         )
+                #     daily_work_summary += "\n"
+                #     total_prs_merged += len(prs["merged"])
 
-                if prs["reviewed"]:
-                    daily_work_summary += (
-                        f"### Pull Requests Reviewed ({len(prs['reviewed'])})\n\n"
-                    )
-                    for review_data in prs["reviewed"]:
-                        pr = review_data["pr"]
-                        review = review_data["review"]
-                        pr_url = (
-                            f"https://github.com/{repo_full_name}/pull/{pr['number']}"
-                        )
-                        daily_work_summary += f"- **#{pr['number']}**: {pr['title']} - {review['state'].capitalize()} ([Link]({pr_url}))\n"
-                    daily_work_summary += "\n"
-                    total_reviews += len(prs["reviewed"])
+                # if prs["reviewed"]:
+                #     daily_work_summary += (
+                #         f"### Pull Requests Reviewed ({len(prs['reviewed'])})\n\n"
+                #     )
+                #     for review_data in prs["reviewed"]:
+                #         pr = review_data["pr"]
+                #         review = review_data["review"]
+                #         pr_url = (
+                #             f"https://github.com/{repo_full_name}/pull/{pr['number']}"
+                #         )
+                #         daily_work_summary += f"- **#{pr['number']}**: {pr['title']} - {review['state'].capitalize()} ([Link]({pr_url}))\n"
+                #     daily_work_summary += "\n"
+                #     total_reviews += len(prs["reviewed"])
 
-                if comments:
-                    daily_work_summary += f"### PR Comments ({len(comments)})\n\n"
-                    for comment_data in comments:
-                        pr = comment_data["pr"]
-                        comment = comment_data["comment"]
-                        pr_url = (
-                            f"https://github.com/{repo_full_name}/pull/{pr['number']}"
-                        )
-                        comment_preview = (
-                            comment["body"][:100] + "..."
-                            if len(comment["body"]) > 100
-                            else comment["body"]
-                        )
-                        daily_work_summary += f"- **#{pr['number']}**: {comment_preview} ([Link]({pr_url}))\n"
-                    daily_work_summary += "\n"
-                    total_comments += len(comments)
+                # if comments:
+                #     daily_work_summary += f"### PR Comments ({len(comments)})\n\n"
+                #     for comment_data in comments:
+                #         pr = comment_data["pr"]
+                #         comment = comment_data["comment"]
+                #         pr_url = (
+                #             f"https://github.com/{repo_full_name}/pull/{pr['number']}"
+                #         )
+                #         comment_preview = (
+                #             comment["body"][:100] + "..."
+                #             if len(comment["body"]) > 100
+                #             else comment["body"]
+                #         )
+                #         daily_work_summary += f"- **#{pr['number']}**: {comment_preview} ([Link]({pr_url}))\n"
+                #     daily_work_summary += "\n"
+                #     total_comments += len(comments)
 
         # Add summary
         daily_work_summary += "## Summary\n\n"
@@ -639,7 +652,7 @@ def main():
     # Initialize the tracker with debug mode
     tracker = GitHubActivityTracker(GITHUB_TOKEN, ORG_NAME, debug=False)
 
-    today = pendulum.now()
+    today = pendulum.tomorrow()
     week_ago = today.start_of("year")
     period = pendulum.interval(week_ago, today)
 
@@ -661,8 +674,6 @@ def main():
         print("Processing all repositories in the organization")
 
     report = tracker.get_github_daily_work(GITHUB_USERNAME, period, repository_filter)
-    print("\n" + "=" * 80)
-    print(report)
 
     # Save report to file
     filter_suffix = "_filtered" if repository_filter else ""
