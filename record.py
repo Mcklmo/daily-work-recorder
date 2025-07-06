@@ -22,6 +22,23 @@ def print(message: str):
     logger.info(message)
 
 
+class Commit:
+    def __init__(
+        self,
+        commit_date: pendulum.DateTime,
+        commit_msg: str,
+        commit_sha: str,
+        commit_url: str,
+    ):
+        self.commit_date = commit_date
+        self.commit_msg = commit_msg
+        self.commit_sha = commit_sha
+        self.commit_url = commit_url
+
+    def __str__(self):
+        return f"- `{self.commit_date.to_datetime_string()}` **{self.commit_msg}** ([{self.commit_sha}]({self.commit_url}))\n"
+
+
 class GitHubActivityTracker:
     def __init__(self, github_token: str, org_name: str, debug: bool = False):
         self.github_token = github_token
@@ -164,7 +181,7 @@ class GitHubActivityTracker:
 
     def get_commits_for_repo(
         self, repo_name: str, username: str, since: str, until: str
-    ) -> list:
+    ) -> list[Commit]:
         """Get all unique commits for a repo across all branches, filtered by author."""
         all_commits = {}
         branches = self.get_all_branches(repo_name)
@@ -230,11 +247,21 @@ class GitHubActivityTracker:
             ):
                 is_match = True
             if is_match:
-                filtered_commits.append(commit)
+                filtered_commits.append(
+                    Commit(
+                        pendulum.parse(
+                            commit["commit"]["author"]["date"]
+                            or commit["commit"]["committer"]["date"]
+                        ),
+                        commit["commit"]["message"].splitlines()[0],
+                        commit["sha"][:7],
+                        f"https://github.com/{self.org_name}/{repo_name}/commit/{commit['sha']}",
+                    )
+                )
         self.debug_log(
             f"Total commits for {repo_name} after filtering: {len(filtered_commits)}"
         )
-        return filtered_commits
+        return sorted(filtered_commits, key=lambda x: x.commit_date, reverse=True)
 
     def get_pull_requests_for_repo(
         self, repo_name: str, username: str, since: str, until: str
@@ -466,18 +493,11 @@ class GitHubActivityTracker:
                 daily_work_summary += f"## Repository: {repo_name}\n\n"
                 daily_work_summary += f"### Commits ({len(commits)})\n\n"
                 for commit in commits:
-                    commit_msg = commit["commit"]["message"].splitlines()[0]
-                    commit_sha = commit["sha"][:7]
-                    commit_url = (
-                        f"https://github.com/{repo_full_name}/commit/{commit['sha']}"
-                    )
-                    commit_date = pendulum.parse(
-                        commit["commit"]["author"]["date"]
-                        or commit["commit"]["committer"]["date"]
-                    )
-                    daily_work_summary += f"- `{commit_date.to_datetime_string()}` **{commit_msg}** ([{commit_sha}]({commit_url}))\n"
+                    daily_work_summary += str(commit)
+
                 daily_work_summary += "\n"
                 total_commits += len(commits)
+
         daily_work_summary += "## Summary\n\n"
         daily_work_summary += f"- **Total Commits**: {total_commits}\n"
         if total_commits == 0:
