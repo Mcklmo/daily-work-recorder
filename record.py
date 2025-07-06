@@ -137,73 +137,76 @@ class GitHubActivityTracker:
                 f"Error fetching recent commits: {response.status_code} - {response.text}"
             )
 
-    def get_commits_for_repo(
-        self, repo_name: str, username: str, since: str, until: str
-    ) -> List[Dict[str, Any]]:
-        """Get commits for a specific repository within date range"""
-        all_commits = []
-        filtered_commits = []
+    def get_all_branches(self, repo_name: str) -> list:
+        """Return a list of branch names for the given repository."""
+        url = f"{self.base_url}/repos/{self.org_name}/{repo_name}/branches"
+        branches = []
         page = 1
-
-        self.debug_log(f"Fetching commits for repository: {repo_name}")
-        self.debug_log(f"Date range: {since} to {until}")
-        self.debug_log(f"Target user: {username}")
-
-        # First, check what commits exist in the repository (for debugging)
-        self.debug_recent_commits(repo_name, since, until)
-
-        # Fetch all commits in date range (without author filtering)
         while True:
-            url = f"{self.base_url}/repos/{self.org_name}/{repo_name}/commits"
-            params = {
-                "since": since,
-                "until": until,
-                "per_page": 100,
-                "page": page,
-            }
-            # Removed 'author' parameter to get all commits
-
-            self.debug_log(f"API Request: {url}")
-            self.debug_log(f"Params: {params}")
+            params = {"per_page": 100, "page": page}
 
             response = requests.get(url, headers=self.headers, params=params)
-            self.debug_log(f"Response status: {response.status_code}")
-
             if response.status_code != 200:
-                if response.status_code == 409:  # Repository is empty
-                    self.debug_log("Repository is empty")
-                    break
-                self.debug_log(f"Error response: {response.text}")
-                print(
-                    f"Error fetching commits for {repo_name}: {response.status_code} - {response.text}"
+                self.debug_log(
+                    f"Error fetching branches: {response.status_code} - {response.text}"
                 )
                 break
 
-            repo_commits = response.json()
-            self.debug_log(f"Found {len(repo_commits)} commits on page {page}")
-
-            if not repo_commits:
+            data = response.json()
+            if not data:
                 break
 
-            all_commits.extend(repo_commits)
+            branches.extend([b["name"] for b in data])
             page += 1
 
-        # Now filter commits locally by matching various author identifiers
-        self.debug_log(f"Total commits fetched: {len(all_commits)}")
-        self.debug_log(f"Filtering commits locally for user: {username}")
+        self.debug_log(f"Branches for {repo_name}: {branches}")
+        return branches
 
-        for commit in all_commits:
+    def get_commits_for_repo(
+        self, repo_name: str, username: str, since: str, until: str
+    ) -> list:
+        """Get all unique commits for a repo across all branches, filtered by author."""
+        all_commits = {}
+        branches = self.get_all_branches(repo_name)
+        for branch in branches:
+            page = 1
+            while True:
+                url = f"{self.base_url}/repos/{self.org_name}/{repo_name}/commits"
+                params = {
+                    "sha": branch,
+                    "since": since,
+                    "until": until,
+                    "per_page": 100,
+                    "page": page,
+                }
+                response = requests.get(url, headers=self.headers, params=params)
+                if response.status_code != 200:
+                    self.debug_log(
+                        f"Error fetching commits for branch {branch}: {response.status_code} - {response.text}"
+                    )
+                    break
+                repo_commits = response.json()
+                if not repo_commits:
+                    break
+                for commit in repo_commits:
+                    sha = commit.get("sha")
+                    if sha not in all_commits:
+                        all_commits[sha] = commit
+                page += 1
+        self.debug_log(
+            f"Total unique commits fetched for {repo_name}: {len(all_commits)}"
+        )
+        # Local author filtering (as before)
+        filtered_commits = []
+        username_lower = username.lower()
+        for commit in all_commits.values():
             commit_data = commit.get("commit", {})
             author_info = commit_data.get("author", {})
             committer_info = commit_data.get("committer", {})
-
-            # Get various identifiers
             author_name = author_info.get("name", "").lower()
             author_email = author_info.get("email", "").lower()
             committer_name = committer_info.get("name", "").lower()
             committer_email = committer_info.get("email", "").lower()
-
-            # GitHub user info (if available)
             github_author = (
                 commit.get("author", {}).get("login", "").lower()
                 if commit.get("author")
@@ -214,23 +217,11 @@ class GitHubActivityTracker:
                 if commit.get("committer")
                 else ""
             )
-
-            # Flexible matching criteria
-            username_lower = username.lower()
             is_match = False
-            match_reason = ""
-
-            # Match by GitHub username
             if github_author == username_lower or github_committer == username_lower:
                 is_match = True
-                match_reason = f"GitHub username ({github_author or github_committer})"
-
-            # Match by commit author/committer name
             elif author_name == username_lower or committer_name == username_lower:
                 is_match = True
-                match_reason = f"Git name ({author_name or committer_name})"
-
-            # Match by email patterns (flexible matching for common variations)
             elif (
                 username_lower in author_email
                 or username_lower in committer_email
@@ -238,20 +229,10 @@ class GitHubActivityTracker:
                 or committer_email.startswith(username_lower)
             ):
                 is_match = True
-                match_reason = f"Email pattern ({author_email or committer_email})"
-
             if is_match:
                 filtered_commits.append(commit)
-                self.debug_log(
-                    f"Matched commit {commit.get('sha', '')[:7]}: {match_reason}"
-                )
-            else:
-                self.debug_log(
-                    f"Skipped commit {commit.get('sha', '')[:7]}: author='{author_name}', email='{author_email}', github='{github_author}'"
-                )
-
         self.debug_log(
-            f"Total commits found for {repo_name} after filtering: {len(filtered_commits)}"
+            f"Total commits for {repo_name} after filtering: {len(filtered_commits)}"
         )
         return filtered_commits
 
@@ -421,16 +402,8 @@ class GitHubActivityTracker:
         target_date_range: pendulum.Interval,
         repository_filter: Optional[List[str]] = None,
     ) -> str:
-        """Generate a comprehensive daily work summary
-
-        Args:
-            username: GitHub username to track
-            target_date_range: Date range for the report
-            repository_filter: Optional list of repository names to filter for (e.g., ["heads-backend", "heads-frontend"])
-        """
         since = target_date_range.start.to_iso8601_string()
         until = target_date_range.end.to_iso8601_string()
-
         self.debug_log(f"Starting get_github_daily_work for user: {username}")
         self.debug_log(
             f"Date range: {target_date_range.start} to {target_date_range.end}"
@@ -438,17 +411,12 @@ class GitHubActivityTracker:
         self.debug_log(f"Since (ISO): {since}")
         self.debug_log(f"Until (ISO): {until}")
         self.debug_log(f"Repository filter: {repository_filter}")
-
-        # Get all organization repositories
         print(f"Fetching repositories from organization: {self.org_name}")
         all_repositories = self.get_org_repositories()
-
         if not all_repositories:
             return (
                 "No repositories found in the organization or insufficient permissions."
             )
-
-        # Filter repositories if filter is provided
         if repository_filter:
             repositories = [
                 repo for repo in all_repositories if repo["name"] in repository_filter
@@ -457,12 +425,9 @@ class GitHubActivityTracker:
             print(
                 f"Found {len(repositories)} out of {len(all_repositories)} repositories"
             )
-
             self.debug_log(f"Filtered repositories found:")
             for repo in repositories:
                 self.debug_log(f"  - {repo['name']} (full_name: {repo['full_name']})")
-
-            # Check if any filtered repositories were not found
             found_repo_names = [repo["name"] for repo in repositories]
             missing_repos = [
                 name for name in repository_filter if name not in found_repo_names
@@ -475,153 +440,48 @@ class GitHubActivityTracker:
         else:
             repositories = all_repositories
             print(f"Processing all {len(repositories)} repositories")
-
         if not repositories:
             if repository_filter:
                 return f"No repositories found matching the filter: {repository_filter}"
             else:
                 return "No repositories found in the organization."
-
         daily_work_summary = f"# GitHub Activity Report for {username}\n\n"
         daily_work_summary += f"**Organization:** {self.org_name}\n"
         daily_work_summary += f"**Period:** {target_date_range.start.format('YYYY-MM-DD')} to {target_date_range.end.format('YYYY-MM-DD')}\n"
-
         if repository_filter:
             daily_work_summary += f"**Repositories:** {', '.join(repository_filter)}\n"
-
         daily_work_summary += "\n"
-
         total_commits = 0
-        total_prs_created = 0
-        total_prs_merged = 0
-        total_reviews = 0
-        total_comments = 0
-
         for repo in repositories:
             repo_name = repo["name"]
             repo_full_name = repo["full_name"]
-
             print(f"Processing repository: {repo_name}")
             self.debug_log(
                 f"Processing repository: {repo_name} (full_name: {repo_full_name})"
             )
-
-            # Get commits
             commits = self.get_commits_for_repo(repo_name, username, since, until)
-
-            # # Get pull requests
-            # prs = self.get_pull_requests_for_repo(repo_name, username, since, until)
-
-            # # Get PR comments
-            # comments = self.get_pr_comments_for_repo(repo_name, username, since, until)
-
             self.debug_log(f"Repository {repo_name} results:")
             self.debug_log(f"  - Commits: {len(commits)}")
-            # self.debug_log(f"  - PRs created: {len(prs['created'])}")
-            # self.debug_log(f"  - PRs merged: {len(prs['merged'])}")
-            # self.debug_log(f"  - PRs reviewed: {len(prs['reviewed'])}")
-            # self.debug_log(f"  - Comments: {len(comments)}")
-
-            # Only include repository in report if there's activity
-            if (
-                commits
-                # or prs["created"]
-                # or prs["merged"]
-                # or prs["reviewed"]
-                # or comments
-            ):
+            if commits:
                 daily_work_summary += f"## Repository: {repo_name}\n\n"
-
-                if commits:
-                    daily_work_summary += f"### Commits ({len(commits)})\n\n"
-                    for commit in commits:
-                        commit_msg = commit["commit"]["message"].splitlines()[0]
-                        commit_sha = commit["sha"][:7]
-                        commit_url = f"https://github.com/{repo_full_name}/commit/{commit['sha']}"
-                        commit_date = pendulum.parse(
-                            commit["commit"]["author"]["date"]
-                            or commit["commit"]["committer"]["date"]
-                        )
-                        daily_work_summary += f"- `{commit_date.to_datetime_string()}` **{commit_msg}** ([{commit_sha}]({commit_url}))\n"
-                    daily_work_summary += "\n"
-                    total_commits += len(commits)
-
-                # if prs["created"]:
-                #     daily_work_summary += (
-                #         f"### Pull Requests Created ({len(prs['created'])})\n\n"
-                #     )
-                #     for pr in prs["created"]:
-                #         pr_url = (
-                #             f"https://github.com/{repo_full_name}/pull/{pr['number']}"
-                #         )
-                #         daily_work_summary += (
-                #             f"- **#{pr['number']}**: {pr['title']} ([Link]({pr_url}))\n"
-                #         )
-                #     daily_work_summary += "\n"
-                #     total_prs_created += len(prs["created"])
-
-                # if prs["merged"]:
-                #     daily_work_summary += (
-                #         f"### Pull Requests Merged ({len(prs['merged'])})\n\n"
-                #     )
-                #     for pr in prs["merged"]:
-                #         pr_url = (
-                #             f"https://github.com/{repo_full_name}/pull/{pr['number']}"
-                #         )
-                #         daily_work_summary += (
-                #             f"- **#{pr['number']}**: {pr['title']} ([Link]({pr_url}))\n"
-                #         )
-                #     daily_work_summary += "\n"
-                #     total_prs_merged += len(prs["merged"])
-
-                # if prs["reviewed"]:
-                #     daily_work_summary += (
-                #         f"### Pull Requests Reviewed ({len(prs['reviewed'])})\n\n"
-                #     )
-                #     for review_data in prs["reviewed"]:
-                #         pr = review_data["pr"]
-                #         review = review_data["review"]
-                #         pr_url = (
-                #             f"https://github.com/{repo_full_name}/pull/{pr['number']}"
-                #         )
-                #         daily_work_summary += f"- **#{pr['number']}**: {pr['title']} - {review['state'].capitalize()} ([Link]({pr_url}))\n"
-                #     daily_work_summary += "\n"
-                #     total_reviews += len(prs["reviewed"])
-
-                # if comments:
-                #     daily_work_summary += f"### PR Comments ({len(comments)})\n\n"
-                #     for comment_data in comments:
-                #         pr = comment_data["pr"]
-                #         comment = comment_data["comment"]
-                #         pr_url = (
-                #             f"https://github.com/{repo_full_name}/pull/{pr['number']}"
-                #         )
-                #         comment_preview = (
-                #             comment["body"][:100] + "..."
-                #             if len(comment["body"]) > 100
-                #             else comment["body"]
-                #         )
-                #         daily_work_summary += f"- **#{pr['number']}**: {comment_preview} ([Link]({pr_url}))\n"
-                #     daily_work_summary += "\n"
-                #     total_comments += len(comments)
-
-        # Add summary
+                daily_work_summary += f"### Commits ({len(commits)})\n\n"
+                for commit in commits:
+                    commit_msg = commit["commit"]["message"].splitlines()[0]
+                    commit_sha = commit["sha"][:7]
+                    commit_url = (
+                        f"https://github.com/{repo_full_name}/commit/{commit['sha']}"
+                    )
+                    commit_date = pendulum.parse(
+                        commit["commit"]["author"]["date"]
+                        or commit["commit"]["committer"]["date"]
+                    )
+                    daily_work_summary += f"- `{commit_date.to_datetime_string()}` **{commit_msg}** ([{commit_sha}]({commit_url}))\n"
+                daily_work_summary += "\n"
+                total_commits += len(commits)
         daily_work_summary += "## Summary\n\n"
         daily_work_summary += f"- **Total Commits**: {total_commits}\n"
-        daily_work_summary += f"- **Total PRs Created**: {total_prs_created}\n"
-        daily_work_summary += f"- **Total PRs Merged**: {total_prs_merged}\n"
-        daily_work_summary += f"- **Total Reviews**: {total_reviews}\n"
-        daily_work_summary += f"- **Total Comments**: {total_comments}\n"
-
-        if (
-            total_commits == 0
-            and total_prs_created == 0
-            and total_prs_merged == 0
-            and total_reviews == 0
-            and total_comments == 0
-        ):
+        if total_commits == 0:
             return f"No GitHub activity found for {username} in {self.org_name} during the specified period."
-
         return daily_work_summary
 
 
