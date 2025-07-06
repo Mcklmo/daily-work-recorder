@@ -63,6 +63,67 @@ class GitHubActivityTracker:
         self.debug_log(f"Total repositories found: {len(repositories)}")
         return repositories
 
+    def debug_recent_commits(
+        self, repo_name: str, since: str, until: str, limit: int = 5
+    ):
+        """Debug method to check recent commits in repository without author filtering"""
+        if not self.debug:
+            return
+
+        self.debug_log(
+            f"Checking recent commits in {repo_name} (without author filter)"
+        )
+
+        url = f"{self.base_url}/repos/{self.org_name}/{repo_name}/commits"
+        params = {
+            "since": since,
+            "until": until,
+            "per_page": limit,
+            "page": 1,
+        }
+
+        response = requests.get(url, headers=self.headers, params=params)
+
+        if response.status_code == 200:
+            commits = response.json()
+            self.debug_log(
+                f"Found {len(commits)} recent commits in {repo_name} (any author)"
+            )
+
+            for i, commit in enumerate(commits):
+                commit_info = {
+                    "sha": commit.get("sha", "")[:7],
+                    "message": commit.get("commit", {}).get("message", "")[:50],
+                    "author_name": commit.get("commit", {})
+                    .get("author", {})
+                    .get("name", ""),
+                    "author_email": commit.get("commit", {})
+                    .get("author", {})
+                    .get("email", ""),
+                    "committer_name": commit.get("commit", {})
+                    .get("committer", {})
+                    .get("name", ""),
+                    "committer_email": commit.get("commit", {})
+                    .get("committer", {})
+                    .get("email", ""),
+                    "github_author": (
+                        commit.get("author", {}).get("login", "")
+                        if commit.get("author")
+                        else ""
+                    ),
+                    "github_committer": (
+                        commit.get("committer", {}).get("login", "")
+                        if commit.get("committer")
+                        else ""
+                    ),
+                    "date": commit.get("commit", {}).get("author", {}).get("date", ""),
+                }
+                self.debug_log(f"  Recent commit {i+1}: {commit_info}")
+        else:
+            self.debug_log(
+                f"Error fetching recent commits: {response.status_code} - {response.text}"
+            )
+
     def get_commits_for_repo(
         self, repo_name: str, username: str, since: str, until: str
     ) -> List[Dict[str, Any]]:
@@ -73,6 +134,9 @@ class GitHubActivityTracker:
         self.debug_log(f"Fetching commits for repository: {repo_name}")
         self.debug_log(f"Date range: {since} to {until}")
         self.debug_log(f"Author: {username}")
+
+        # First, check what commits exist in the repository (for debugging)
+        self.debug_recent_commits(repo_name, since, until)
 
         while True:
             url = f"{self.base_url}/repos/{self.org_name}/{repo_name}/commits"
@@ -546,15 +610,15 @@ def main():
     tracker = GitHubActivityTracker(GITHUB_TOKEN, ORG_NAME, debug=DEBUG)
 
     # Fix the date range issue - the original code had swapped start/end dates
-    today = pendulum.now().start_of("month")
-    yesterday = today.end_of("month")
+    today = pendulum.now()
+    week_ago = today.subtract(days=7)  # Look for commits in the past week
 
-    # Create a period for the last day
-    period = pendulum.interval(yesterday, today)
+    # Create a period for the last week
+    period = pendulum.interval(week_ago, today)
 
     # Debug information
     print(f"[DEBUG] Today: {today}")
-    print(f"[DEBUG] Yesterday: {yesterday}")
+    print(f"[DEBUG] Week ago: {week_ago}")
     print(f"[DEBUG] Period start: {period.start}")
     print(f"[DEBUG] Period end: {period.end}")
     print(f"[DEBUG] Period duration: {period.in_words()}")
