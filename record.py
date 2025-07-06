@@ -469,7 +469,7 @@ class GitHubActivityTracker:
             else:
                 return "No repositories found in the organization."
 
-        daily_work_summary = f"# GitHub Activity Report for {username}\n"
+        daily_work_summary = f"# GitHub Activity Report for {username}\n\n"
         daily_work_summary += f"**Organization:** {self.org_name}\n"
         daily_work_summary += f"**Period:** {target_date_range.start.format('YYYY-MM-DD')} to {target_date_range.end.format('YYYY-MM-DD')}\n"
 
@@ -525,11 +525,11 @@ class GitHubActivityTracker:
                         commit_msg = commit["commit"]["message"].splitlines()[0]
                         commit_sha = commit["sha"][:7]
                         commit_url = f"https://github.com/{repo_full_name}/commit/{commit['sha']}"
-                        commit_date = (
+                        commit_date = pendulum.parse(
                             commit["commit"]["author"]["date"]
                             or commit["commit"]["committer"]["date"]
                         )
-                        daily_work_summary += f"- {commit_date} **{commit_msg}** ([{commit_sha}]({commit_url}))\n"
+                        daily_work_summary += f"- `{commit_date.to_datetime_string()}` **{commit_msg}** ([{commit_sha}]({commit_url}))\n"
                     daily_work_summary += "\n"
                     total_commits += len(commits)
 

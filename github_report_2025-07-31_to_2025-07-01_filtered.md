@@ -1,1 +1,0 @@
-No GitHub activity found for mcklmo in BC-Technology during the specified period.
