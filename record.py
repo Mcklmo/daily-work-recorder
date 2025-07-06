@@ -517,23 +517,25 @@ class GitHubActivityTracker:
                 or prs["reviewed"]
                 or comments
             ):
-                daily_work_summary += f"## Repository: {repo_name}\n"
+                daily_work_summary += f"## Repository: {repo_name}\n\n"
 
                 if commits:
-                    daily_work_summary += f"### Commits ({len(commits)})\n"
+                    daily_work_summary += f"### Commits ({len(commits)})\n\n"
                     for commit in commits:
                         commit_msg = commit["commit"]["message"].splitlines()[0]
                         commit_sha = commit["sha"][:7]
                         commit_url = f"https://github.com/{repo_full_name}/commit/{commit['sha']}"
-                        daily_work_summary += (
-                            f"- **{commit_msg}** ([{commit_sha}]({commit_url}))\n"
+                        commit_date = (
+                            commit["commit"]["author"]["date"]
+                            or commit["commit"]["committer"]["date"]
                         )
+                        daily_work_summary += f"- {commit_date} **{commit_msg}** ([{commit_sha}]({commit_url}))\n"
                     daily_work_summary += "\n"
                     total_commits += len(commits)
 
                 if prs["created"]:
                     daily_work_summary += (
-                        f"### Pull Requests Created ({len(prs['created'])})\n"
+                        f"### Pull Requests Created ({len(prs['created'])})\n\n"
                     )
                     for pr in prs["created"]:
                         pr_url = (
@@ -547,7 +549,7 @@ class GitHubActivityTracker:
 
                 if prs["merged"]:
                     daily_work_summary += (
-                        f"### Pull Requests Merged ({len(prs['merged'])})\n"
+                        f"### Pull Requests Merged ({len(prs['merged'])})\n\n"
                     )
                     for pr in prs["merged"]:
                         pr_url = (
@@ -561,7 +563,7 @@ class GitHubActivityTracker:
 
                 if prs["reviewed"]:
                     daily_work_summary += (
-                        f"### Pull Requests Reviewed ({len(prs['reviewed'])})\n"
+                        f"### Pull Requests Reviewed ({len(prs['reviewed'])})\n\n"
                     )
                     for review_data in prs["reviewed"]:
                         pr = review_data["pr"]
@@ -574,7 +576,7 @@ class GitHubActivityTracker:
                     total_reviews += len(prs["reviewed"])
 
                 if comments:
-                    daily_work_summary += f"### PR Comments ({len(comments)})\n"
+                    daily_work_summary += f"### PR Comments ({len(comments)})\n\n"
                     for comment_data in comments:
                         pr = comment_data["pr"]
                         comment = comment_data["comment"]
@@ -591,7 +593,7 @@ class GitHubActivityTracker:
                     total_comments += len(comments)
 
         # Add summary
-        daily_work_summary += "## Summary\n"
+        daily_work_summary += "## Summary\n\n"
         daily_work_summary += f"- **Total Commits**: {total_commits}\n"
         daily_work_summary += f"- **Total PRs Created**: {total_prs_created}\n"
         daily_work_summary += f"- **Total PRs Merged**: {total_prs_merged}\n"
@@ -615,8 +617,7 @@ def main():
     GITHUB_USERNAME = os.getenv("GITHUB_USERNAME", "mcklmo")
     GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
     ORG_NAME = os.getenv("GITHUB_ORG", "BC-Technology")
-    DEBUG = os.getenv("DEBUG", "true").lower() == "true"  # Enable debug by default
-
+    DEBUG = os.getenv("DEBUG", "false").lower() == "true"
     # Repository filter - can be set via environment variable or hardcoded
     REPO_FILTER = os.getenv("GITHUB_REPO_FILTER")  # Comma-separated list
     if REPO_FILTER:
@@ -636,13 +637,10 @@ def main():
         exit(1)
 
     # Initialize the tracker with debug mode
-    tracker = GitHubActivityTracker(GITHUB_TOKEN, ORG_NAME, debug=DEBUG)
+    tracker = GitHubActivityTracker(GITHUB_TOKEN, ORG_NAME, debug=False)
 
-    # Fix the date range issue - the original code had swapped start/end dates
     today = pendulum.now()
-    week_ago = today.subtract(days=7)  # Look for commits in the past week
-
-    # Create a period for the last week
+    week_ago = today.start_of("year")
     period = pendulum.interval(week_ago, today)
 
     # Debug information
