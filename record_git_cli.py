@@ -444,7 +444,7 @@ class GitActivityTracker:
         combined_report += f"- **Total Commits**: {total_commits}\n"
         combined_report += f"- **Total Repositories**: {len(repo_paths)}\n\n"
 
-        all_commits = sorted(all_commits, key=lambda x: x[0])
+        all_commits = sorted(all_commits, key=lambda x: x[2], reverse=True)
 
         structured_commits: dict[str, list[tuple[str, str]]] = {}
 
@@ -474,7 +474,7 @@ class GitActivityTracker:
             for day in sorted(all_commits_by_day.keys(), reverse=True):
                 combined_report += f"- **{day}**: {all_commits_by_day[day]} commits\n"
 
-        if total_commits == 0:  # hi
+        if total_commits == 0:
             return f"No git activity found for {username} in any repositories during the specified period."
 
         return combined_report
