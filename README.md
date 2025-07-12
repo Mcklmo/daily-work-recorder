@@ -1,243 +1,263 @@
-# GitHub Daily Work Recorder
+# Daily Work Recorder
 
-An automated tool to generate comprehensive daily summaries of your GitHub work within organization repositories, including commits, pull requests, reviews, and comments.
+A Python tool for tracking and reporting daily work activities from git repositories. This project provides two implementations:
+
+1. **GitHub API Version** (`record.py`) - Fetches data from GitHub API across multiple repositories in an organization
+2. **Git CLI Version** (`record_git_cli.py`) - Uses local git commands to analyze the current repository
 
 ## Features
 
-- **Comprehensive Activity Tracking**: Captures commits, PRs (created/merged), reviews, and comments
-- **Organization Repository Support**: Works with private repositories within your organization
-- **Date Range Filtering**: Generate reports for specific dates or date ranges
-- **Markdown Output**: Professional formatted reports suitable for client billing
-- **Detailed Summaries**: Includes links to commits, PRs, and activity counts
+### GitHub API Version (`record.py`)
 
-## Requirements
+- Fetches commits across multiple repositories in a GitHub organization
+- Supports filtering by specific repositories
+- Tracks commits, pull requests, and reviews
+- Requires GitHub API token
+- Works with remote repositories without local clones
 
-- Python 3.7+
-- GitHub Personal Access Token with appropriate permissions
-- Access to organization repositories
+### Git CLI Version (`record_git_cli.py`)
+
+- Analyzes commits in the current local git repository
+- Works with any git repository (GitHub, GitLab, Bitbucket, etc.)
+- No API tokens required
+- Faster for single repository analysis
+- Works offline with local git history
 
 ## Installation
 
-1. Clone or download this repository
+1. Clone this repository:
+
+```bash
+git clone <repository-url>
+cd daily-work-recorder
+```
+
 2. Install dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-## Configuration
-
-### 1. Create a GitHub Personal Access Token
-
-1. Go to GitHub → Settings → Developer settings → Personal access tokens → Tokens (classic)
-2. Click "Generate new token (classic)"
-3. Set the following scopes:
-   - `repo` - Full control of private repositories
-   - `read:org` - Read org and team membership, read org projects
-   - `read:user` - Read user profile data
-
-### 2. Set Environment Variables
-
-Create a `.env` file in the project root with the following variables:
 
 ```bash
-GITHUB_USERNAME=your_github_username
-GITHUB_TOKEN=your_github_personal_access_token
-GITHUB_ORG=your_organization_name
-GITHUB_REPO_FILTER=optional_comma_separated_repo_names
+pip install -r requirements.txt
 ```
 
-**Example:**
+3. Set up environment variables:
 
 ```bash
-GITHUB_USERNAME=mcklmo
-GITHUB_TOKEN=ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-GITHUB_ORG=BC-Technology
-GITHUB_REPO_FILTER=heads-backend,heads-frontend
+# Copy the example environment file
+cp .env.example .env
+
+# Edit .env with your settings
+GITHUB_USERNAME=your-username
+DEBUG=false
+
+# For GitHub API version only:
+GITHUB_TOKEN=your-github-token
+GITHUB_ORG=your-organization
+GITHUB_REPO_FILTER=repo1,repo2  # Optional: comma-separated list
 ```
-
-**Environment Variables:**
-
-- `GITHUB_USERNAME`: Your GitHub username
-- `GITHUB_TOKEN`: Your GitHub Personal Access Token
-- `GITHUB_ORG`: The organization name
-- `GITHUB_REPO_FILTER`: (Optional) Comma-separated list of repository names to filter for
 
 ## Usage
 
-### Basic Usage
+### Git CLI Version (Recommended for single repository)
 
-Run the script to generate a report for the last day:
+The Git CLI version is simpler and works with any git repository:
+
+```bash
+# Run from within any git repository
+python record_git_cli.py
+
+# Or specify a different repository path
+python record_git_cli.py --repo-path /path/to/your/repo
+
+# With custom date range and username
+python record_git_cli.py --repo-path ~/Projects/my-app --username johndoe --start-date 2025-01-01 --end-date 2025-01-15
+
+# Show all available options
+python record_git_cli.py --help
+```
+
+**Command Line Options:**
+
+- `--repo-path` / `-r`: Path to the git repository (default: current directory)
+- `--username` / `-u`: Git username to filter by (default: from GITHUB_USERNAME env var)
+- `--start-date` / `-s`: Start date for the report (YYYY-MM-DD format)
+- `--end-date` / `-e`: End date for the report (YYYY-MM-DD format)
+- `--debug` / `-d`: Enable debug mode
+
+Or use the example script:
+
+```bash
+python example_usage_git_cli.py
+```
+
+**Key Features:**
+
+- Works with any git repository on your machine
+- Automatically detects git repository in current directory or parent directories
+- Analyzes all branches for commits
+- Generates detailed reports with daily breakdowns
+- No external API dependencies
+
+### GitHub API Version (For multiple repositories)
+
+For analyzing multiple repositories in a GitHub organization:
 
 ```bash
 python record.py
 ```
 
-### Programmatic Usage
-
-```python
-from record import GitHubActivityTracker
-import pendulum
-import os
-
-# Initialize tracker
-tracker = GitHubActivityTracker(
-    github_token=os.getenv("GITHUB_TOKEN"),
-    org_name="your-org-name"
-)
-
-# Create date range (last 7 days)
-end_date = pendulum.now()
-start_date = end_date.subtract(days=7)
-period = start_date.date().period(end_date.date())
-
-# Generate report
-report = tracker.get_github_daily_work("your-username", period)
-print(report)
-```
-
-### Custom Date Ranges
-
-```python
-import pendulum
-
-# Specific date
-date = pendulum.parse("2024-01-15")
-period = date.date().period(date.date())
-
-# Date range
-start = pendulum.parse("2024-01-01")
-end = pendulum.parse("2024-01-31")
-period = start.date().period(end.date())
-
-# Last week
-today = pendulum.now()
-last_week = today.subtract(weeks=1)
-period = last_week.date().period(today.date())
-```
-
-### Repository Filtering
-
-You can filter for specific repositories instead of processing all organization repositories:
-
-```python
-# Filter for specific repositories
-tracker = GitHubActivityTracker(
-    github_token=os.getenv("GITHUB_TOKEN"),
-    org_name="your-org-name"
-)
-
-# Specify repositories to process
-repository_filter = ["heads-backend", "heads-frontend", "api-service"]
-
-report = tracker.get_github_daily_work(
-    username="your-username",
-    target_date_range=period,
-    repository_filter=repository_filter
-)
-```
-
-#### Environment Variable Configuration
-
-You can also set the repository filter via environment variables:
+Or use the example script:
 
 ```bash
-# In your .env file
-GITHUB_REPO_FILTER=heads-backend,heads-frontend,api-service
+python example_usage.py
 ```
 
-#### Default Repository Filter
+**Requirements:**
 
-The script currently defaults to filtering for `heads-backend` and `heads-frontend`. To change this:
+- GitHub Personal Access Token with appropriate permissions
+- Access to the GitHub organization
+- Internet connection
 
-1. **Edit the script directly**: Modify the `repository_filter` variable in the `main()` function
-2. **Use environment variables**: Set `GITHUB_REPO_FILTER` as shown above
-3. **Process all repositories**: Set `repository_filter = None` in the main function
+## Configuration
 
-## Output Format
+### Environment Variables
 
-The tool generates a comprehensive Markdown report including:
+Create a `.env` file in the project root:
 
-- **Repository-level breakdown** of all activities
-- **Commits** with messages, SHA, and links
-- **Pull Requests** (created, merged, reviewed)
-- **Comments** on PRs with previews
-- **Summary statistics** for the reporting period
+```env
+# Common settings
+GITHUB_USERNAME=your-username
+DEBUG=false
 
-### Sample Output
+# Git CLI version only
+REPO_PATH=/path/to/your/repo  # Optional: repository path
+
+# GitHub API version only
+GITHUB_TOKEN=your-github-personal-access-token
+GITHUB_ORG=your-organization-name
+GITHUB_REPO_FILTER=repo1,repo2,repo3  # Optional: specific repositories
+```
+
+### GitHub Token Setup (API version only)
+
+1. Go to GitHub Settings > Developer settings > Personal access tokens
+2. Generate a new token with these scopes:
+   - `repo` - Full control of private repositories
+   - `read:org` - Read organization membership
+   - `read:user` - Read user profile data
+
+## Output
+
+Both versions generate markdown reports with:
+
+- **Summary statistics** (total commits, active days, etc.)
+- **Detailed commit list** with timestamps, messages, and links
+- **Daily breakdown** showing commits per day
+- **Repository information** and date ranges
+
+Example output:
 
 ```markdown
-# GitHub Activity Report for username
+# Git Activity Report for username
 
-**Organization:** BC-Technology
-**Period:** 2024-01-15 to 2024-01-16
+**Repository:** my-project
+**Period:** 2025-01-01 to 2025-01-15
+**Repository Path:** /path/to/repo
 
-## Repository: project-name
+## Commits (42)
 
-### Commits (3)
-
-- **Fix authentication bug** ([abc1234](https://github.com/org/repo/commit/abc1234))
-- **Add user validation** ([def5678](https://github.com/org/repo/commit/def5678))
-
-### Pull Requests Created (1)
-
-- **#123**: Implement new feature ([Link](https://github.com/org/repo/pull/123))
+- `2025-01-15 10:30:00` **Add new feature** (abc1234) by John Doe
+- `2025-01-14 16:45:00` **Fix bug in authentication** (def5678) by John Doe
+...
 
 ## Summary
 
-- **Total Commits**: 3
-- **Total PRs Created**: 1
-- **Total PRs Merged**: 0
-- **Total Reviews**: 2
-- **Total Comments**: 4
+- **Total Commits**: 42
+- **Days with commits**: 8
+- **Average commits per day**: 5.3
+
+### Daily Breakdown
+
+- **2025-01-15**: 3 commits
+- **2025-01-14**: 7 commits
+...
 ```
 
-## API Endpoints Used
+## Comparison: Git CLI vs GitHub API
 
-This tool uses the following GitHub REST API endpoints:
+| Feature | Git CLI | GitHub API |
+|---------|---------|------------|
+| **Setup** | Simple | Requires API token |
+| **Speed** | Fast | Slower (API calls) |
+| **Repositories** | Single (via path) | Multiple |
+| **Offline** | Yes | No |
+| **Git Providers** | Any | GitHub only |
+| **Branch Analysis** | All branches | All branches |
+| **PR/Review Data** | No | Yes |
+| **Dependencies** | Git CLI only | Internet + API access |
 
-- `/orgs/{org}/repos` - List organization repositories
-- `/repos/{owner}/{repo}/commits` - Get commits by author and date
-- `/repos/{owner}/{repo}/pulls` - Get pull requests
-- `/search/issues` - Search for reviewed PRs
-- `/repos/{owner}/{repo}/pulls/{number}/reviews` - Get PR reviews
-- `/repos/{owner}/{repo}/issues/{number}/comments` - Get PR comments
+## Development
 
-## Troubleshooting
+### Project Structure
 
-### Common Issues
+```
+daily-work-recorder/
+├── record.py                 # GitHub API implementation
+├── record_git_cli.py         # Git CLI implementation
+├── example_usage.py          # GitHub API examples
+├── example_usage_git_cli.py  # Git CLI examples
+├── requirements.txt          # Python dependencies
+├── README.md                 # This file
+└── .env                      # Environment variables (create this)
+```
 
-1. **"No repositories found"**
+### Testing
 
-   - Ensure your token has `read:org` scope
-   - Verify you're a member of the organization
-   - Check the organization name is correct
+Run the example scripts to test both implementations:
 
-2. **"Error fetching commits"**
+```bash
+# Test Git CLI version (must be in a git repository)
+python example_usage_git_cli.py
 
-   - Ensure your token has `repo` scope
-   - Verify the repository exists and you have access
-   - Check if the repository is empty
+# Test GitHub API version (requires API token)
+python example_usage.py
+```
 
-3. **Rate limiting**
-   - The tool includes pagination to handle large datasets
-   - GitHub API has rate limits (5000 requests/hour for authenticated users)
-   - The tool will fail gracefully if limits are exceeded
+## Common Issues
 
-### Required Permissions
+### Git CLI Version
 
-Your GitHub token must have access to:
+1. **"No git repository found"**
+   - Ensure you're running the script from within a git repository
+   - Check that `.git` folder exists in current or parent directories
+   - Use `--repo-path` to specify a different repository location
 
-- Private repositories in the organization
-- Organization membership information
-- User profile data
+2. **"No git repository found at: /path/to/repo"**
+   - Verify the path exists and contains a `.git` folder
+   - Check file permissions for the repository directory
+   - Use absolute paths or properly expand `~` in paths
 
-## Security Notes
+3. **No commits found**
+   - Verify the date range includes your commits
+   - Check that your git author name/email matches the username filter
 
-- Never commit your `.env` file to version control
-- Use environment variables for sensitive data
-- Consider using GitHub Apps for production deployments
-- Regularly rotate your Personal Access Tokens
+### GitHub API Version
+
+1. **"Error: GITHUB_TOKEN environment variable not set"**
+   - Create a GitHub Personal Access Token
+   - Add it to your `.env` file
+
+2. **"No repositories found"**
+   - Verify organization name is correct
+   - Check that your token has `read:org` permission
+   - Ensure you're a member of the organization
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Add tests if applicable
+5. Submit a pull request
 
 ## License
 
-This project is provided as-is for personal and professional use.
+This project is licensed under the MIT License - see the LICENSE file for details.

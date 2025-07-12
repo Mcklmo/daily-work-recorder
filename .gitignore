@@ -1,3 +1,4 @@
 /.venv
 .env
 github_report_*.md
+git_report_*.md

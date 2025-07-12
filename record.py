@@ -531,14 +531,13 @@ def main():
 
     # Initialize the tracker with debug mode
     tracker = GitHubActivityTracker(GITHUB_TOKEN, ORG_NAME, debug=False)
-
-    today = pendulum.tomorrow()
-    week_ago = today.start_of("year")
-    period = pendulum.interval(week_ago, today)
+    end = pendulum.parse("2025-07-12")
+    start = pendulum.parse("2025-07-01")
+    period = pendulum.interval(start, end)
 
     # Debug information
-    print(f"[DEBUG] Today: {today}")
-    print(f"[DEBUG] Week ago: {week_ago}")
+    print(f"[DEBUG] Today: {end}")
+    print(f"[DEBUG] Week ago: {start}")
     print(f"[DEBUG] Period start: {period.start}")
     print(f"[DEBUG] Period end: {period.end}")
     print(f"[DEBUG] Period duration: {period.in_words()}")
