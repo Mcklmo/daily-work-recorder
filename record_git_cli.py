@@ -26,18 +26,14 @@ class Commit:
         self,
         commit_date: pendulum.DateTime,
         commit_msg: str,
-        commit_sha: str,
-        author_name: str,
-        author_email: str,
+        commit_hash: str,
     ):
         self.commit_date = commit_date
         self.commit_msg = commit_msg
-        self.commit_sha = commit_sha
-        self.author_name = author_name
-        self.author_email = author_email
+        self.commit_hash = commit_hash
 
     def __str__(self):
-        return f"- `{self.commit_date.to_datetime_string()}` **{self.commit_msg}** ({self.commit_sha}) by {self.author_name}\n"
+        return f"`{self.commit_date.to_datetime_string()}` ({self.commit_hash}) **{self.commit_msg}**"
 
 
 class GitActivityTracker:
@@ -288,9 +284,7 @@ class GitActivityTracker:
                 commit = Commit(
                     commit_date=commit_date,
                     commit_msg=commit_data["subject"],
-                    commit_sha=commit_data["hash"][:7],
-                    author_name=commit_data["author_name"],
-                    author_email=commit_data["author_email"],
+                    commit_hash=commit_data["hash"],
                 )
                 filtered_commits.append(commit)
 
@@ -405,7 +399,11 @@ class GitActivityTracker:
             # Submit all repository processing tasks
             future_to_repo = {
                 executor.submit(
-                    self._process_single_repo, repo_path, username, since, until
+                    self._process_single_repo,
+                    repo_path,
+                    username,
+                    since,
+                    until,
                 ): repo_path
                 for repo_path in repo_paths
             }
@@ -448,23 +446,20 @@ class GitActivityTracker:
 
         all_commits = sorted(all_commits, key=lambda x: x[0])
 
-        structured_commits = {}
+        structured_commits: dict[str, list[tuple[str, str]]] = {}
 
-        for day, repo_name, commit in all_commits:
+        for day, commit_repo_name, commit in all_commits:
             if day not in structured_commits:
-                structured_commits[day] = {}
+                structured_commits[day] = []
 
-            if repo_name not in structured_commits[day]:
-                structured_commits[day][repo_name] = []
+            structured_commits[day].append((commit_repo_name, commit))
 
-            structured_commits[day][repo_name].append(commit)
+        for day, repo_commits in structured_commits.items():
+            day_report = self.create_day_report(day, repo_commits)
 
-        for day, repos in structured_commits.items():
-            combined_report += f"## {day}\n\n"
-            for repo_name, commits in repos.items():
-                combined_report += f"### {day} - {repo_name}\n\n"
-                for commit in commits:
-                    combined_report += f"{commit}\n"
+            filename = f"git_report_multi_{day}.md"
+            with open(filename, "w") as f:
+                f.write(day_report)
 
         if all_commits_by_day:
             combined_report += f"- **Days with commits**: {len(all_commits_by_day)}\n"
@@ -483,6 +478,14 @@ class GitActivityTracker:
             return f"No git activity found for {username} in any repositories during the specified period."
 
         return combined_report
+
+    def create_day_report(self, day: str, repo_commits: List[Tuple[str, str]]) -> str:
+        day_report = f"# Git history for {day}\n\n"
+        for repo_name, commit in repo_commits:
+            repo_name_fmt = repo_name.ljust(45)
+            day_report += f"* {repo_name_fmt}: {commit}\n"
+
+        return day_report
 
 
 def main():
