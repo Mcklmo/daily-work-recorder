@@ -410,59 +410,61 @@ class GitActivityTracker:
                 for repo_path in repo_paths
             }
 
-            # Collect results as they complete
+            all_commits = []
+
             for future in as_completed(future_to_repo):
                 repo_path = future_to_repo[future]
                 print(f"Processing repository: {os.path.basename(repo_path)}")
 
-                try:
-                    repo_path_result, repo_name, commits, error = future.result()
+                repo_path_result, repo_name, commits, error = future.result()
 
-                    if error:
-                        self.debug_log(
-                            f"Error processing repository {repo_path}: {error}"
-                        )
-                        repo_summaries.append(
-                            f"- **{repo_name}**: Error processing repository"
-                        )
-                    else:
-                        if commits:
-                            combined_report += f"## Repository: {repo_name}\n\n"
-                            combined_report += f"**Path:** {repo_path_result}\n"
-                            combined_report += f"**Commits:** {len(commits)}\n\n"
-
-                            for commit in commits:
-                                combined_report += str(commit)
-
-                            combined_report += "\n"
-                            total_commits += len(commits)
-
-                            # Aggregate commits by day
-                            for commit in commits:
-                                day = commit.commit_date.format("YYYY-MM-DD")
-                                if day not in all_commits_by_day:
-                                    all_commits_by_day[day] = 0
-                                all_commits_by_day[day] += 1
-
-                            repo_summaries.append(
-                                f"- **{repo_name}**: {len(commits)} commits"
-                            )
-                        else:
-                            self.debug_log(f"No commits found in {repo_name}")
-                            repo_summaries.append(f"- **{repo_name}**: 0 commits")
-
-                except Exception as e:
-                    self.debug_log(
-                        f"Error getting result for repository {repo_path}: {e}"
-                    )
+                if error:
+                    self.debug_log(f"Error processing repository {repo_path}: {error}")
                     repo_summaries.append(
-                        f"- **{os.path.basename(repo_path)}**: Error processing repository"
+                        f"- **{repo_name}**: Error processing repository"
                     )
+                else:
+                    if not commits:
+                        continue
+
+                    total_commits += len(commits)
+
+                    # Aggregate commits by day
+                    for commit in commits:
+                        day = commit.commit_date.format("YYYY-MM-DD")
+                        if day not in all_commits_by_day:
+                            all_commits_by_day[day] = 0
+
+                        all_commits_by_day[day] += 1
+
+                        all_commits.append((day, repo_name, str(commit)))
+
+                    repo_summaries.append(f"- **{repo_name}**: {len(commits)} commits")
 
         # Add summary section
         combined_report += "## Summary\n\n"
         combined_report += f"- **Total Commits**: {total_commits}\n"
-        combined_report += f"- **Total Repositories**: {len(repo_paths)}\n"
+        combined_report += f"- **Total Repositories**: {len(repo_paths)}\n\n"
+
+        all_commits = sorted(all_commits, key=lambda x: x[0])
+
+        structured_commits = {}
+
+        for day, repo_name, commit in all_commits:
+            if day not in structured_commits:
+                structured_commits[day] = {}
+
+            if repo_name not in structured_commits[day]:
+                structured_commits[day][repo_name] = []
+
+            structured_commits[day][repo_name].append(commit)
+
+        for day, repos in structured_commits.items():
+            combined_report += f"## {day}\n\n"
+            for repo_name, commits in repos.items():
+                combined_report += f"### {day} - {repo_name}\n\n"
+                for commit in commits:
+                    combined_report += f"{commit}\n"
 
         if all_commits_by_day:
             combined_report += f"- **Days with commits**: {len(all_commits_by_day)}\n"
@@ -566,38 +568,32 @@ def main():
         print("Traverse mode enabled - scanning for git repositories...")
 
         # Create a tracker for directory traversal
-        try:
-            temp_tracker = GitActivityTracker(debug=DEBUG)
-            root_path = REPO_PATH or os.getcwd()
+        temp_tracker = GitActivityTracker(debug=DEBUG)
+        root_path = REPO_PATH or os.getcwd()
 
-            print(f"Scanning directory: {root_path}")
-            git_repos = temp_tracker.find_git_repos_in_directory(
-                root_path, args.max_depth
-            )
+        print(f"Scanning directory: {root_path}")
+        git_repos = temp_tracker.find_git_repos_in_directory(root_path, args.max_depth)
 
-            if not git_repos:
-                print(f"No git repositories found in {root_path}")
-                exit(1)
-
-            print(f"Found {len(git_repos)} git repositories:")
-            for repo in git_repos:
-                print(f"  - {repo}")
-
-            # Generate combined report for all repositories
-            report = temp_tracker.get_multiple_repos_daily_work(
-                git_repos, GITHUB_USERNAME, period
-            )
-
-            # Save report to file
-            root_name = os.path.basename(root_path) or "workspace"
-            filename = f"git_report_multi_{root_name}_{period.start.format('YYYY-MM-DD')}_to_{period.end.format('YYYY-MM-DD')}.md"
-            with open(filename, "w") as f:
-                f.write(report)
-            print(f"\nCombined report saved to: {filename}")
-
-        except Exception as e:
-            print(f"Error in traverse mode: {e}")
+        if not git_repos:
+            print(f"No git repositories found in {root_path}")
             exit(1)
+
+        print(f"Found {len(git_repos)} git repositories:")
+        for repo in git_repos:
+            print(f"  - {repo}")
+
+        # Generate combined report for all repositories
+        report = temp_tracker.get_multiple_repos_daily_work(
+            git_repos, GITHUB_USERNAME, period
+        )
+
+        # Save report to file
+        root_name = os.path.basename(root_path) or "workspace"
+        filename = f"git_report_multi_{root_name}_{period.start.format('YYYY-MM-DD')}_to_{period.end.format('YYYY-MM-DD')}.md"
+        with open(filename, "w") as f:
+            f.write(report)
+        print(f"\nCombined report saved to: {filename}")
+
     else:
         # Single repository mode
         try:
