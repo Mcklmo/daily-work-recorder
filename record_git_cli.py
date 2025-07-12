@@ -474,7 +474,7 @@ class GitActivityTracker:
             for day in sorted(all_commits_by_day.keys(), reverse=True):
                 combined_report += f"- **{day}**: {all_commits_by_day[day]} commits\n"
 
-        if total_commits == 0:
+        if total_commits == 0:  # hi
             return f"No git activity found for {username} in any repositories during the specified period."
 
         return combined_report
