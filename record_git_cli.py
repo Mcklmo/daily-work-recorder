@@ -43,13 +43,6 @@ class GitActivityTracker:
     def __init__(self, repo_path: Optional[str] = None, debug: bool = False):
         self.debug = debug
         self.repo_path = self._find_git_repo(repo_path)
-        if not self.repo_path:
-            if repo_path:
-                raise ValueError(f"No git repository found at: {repo_path}")
-            else:
-                raise ValueError(
-                    "No git repository found in current directory or parent directories"
-                )
 
     def debug_log(self, message: str, data: Any = None):
         """Print debug information if debug mode is enabled"""
