@@ -1,16 +1,11 @@
 import subprocess
-import datetime
 import os
-import sys
 import argparse
-from dotenv import load_dotenv
 import pendulum
-from typing import Dict, List, Any, Optional
+from typing import Any, Optional
 import json
 import logging
-import re
 
-load_dotenv()
 
 logger = logging.getLogger(__name__)
 
@@ -99,7 +94,7 @@ class GitActivityTracker:
 
     def find_git_repos_in_directory(
         self, root_path: str, max_depth: int = 1
-    ) -> List[str]:
+    ) -> list[str]:
         """Find all git repositories in a directory with max depth traversal"""
         git_repos = []
         root_path = os.path.abspath(os.path.expanduser(root_path))
@@ -148,7 +143,7 @@ class GitActivityTracker:
 
         return git_repos
 
-    def _run_git_command(self, args: List[str]) -> str:
+    def _run_git_command(self, args: list[str]) -> str:
         """Run a git command and return the output"""
         try:
             result = subprocess.run(
@@ -182,7 +177,7 @@ class GitActivityTracker:
         # Fallback to directory name
         return os.path.basename(self.repo_path)
 
-    def get_all_branches(self) -> List[str]:
+    def get_all_branches(self) -> list[str]:
         """Get all branches in the repository"""
         try:
             # Get all branches (local and remote)
@@ -215,8 +210,8 @@ class GitActivityTracker:
         username: str,
         since: str,
         until: str,
-        branches: Optional[List[str]] = None,
-    ) -> List[Commit]:
+        branches: Optional[list[str]] = None,
+    ) -> list[Commit]:
         """Get all commits for the repository within date range, filtered by author"""
 
         if not branches:
@@ -368,7 +363,7 @@ class GitActivityTracker:
 
     def get_multiple_repos_daily_work(
         self,
-        repo_paths: List[str],
+        repo_paths: list[str],
         username: str,
         target_date_range: pendulum.Interval,
     ) -> str:
