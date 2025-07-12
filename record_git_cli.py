@@ -2,9 +2,10 @@ import subprocess
 import os
 import argparse
 import pendulum
-from typing import Any, Optional
+from typing import Any, Optional, List, Tuple
 import json
 import logging
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 
 logger = logging.getLogger(__name__)
@@ -87,7 +88,7 @@ class GitActivityTracker:
 
     def find_git_repos_in_directory(
         self, root_path: str, max_depth: int = 1
-    ) -> list[str]:
+    ) -> List[str]:
         """Find all git repositories in a directory with max depth traversal"""
         git_repos = []
         root_path = os.path.abspath(os.path.expanduser(root_path))
@@ -136,7 +137,7 @@ class GitActivityTracker:
 
         return git_repos
 
-    def _run_git_command(self, args: list[str]) -> str:
+    def _run_git_command(self, args: List[str]) -> str:
         """Run a git command and return the output"""
         try:
             result = subprocess.run(
@@ -170,7 +171,7 @@ class GitActivityTracker:
         # Fallback to directory name
         return os.path.basename(self.repo_path)
 
-    def get_all_branches(self) -> list[str]:
+    def get_all_branches(self) -> List[str]:
         """Get all branches in the repository"""
         try:
             # Get all branches (local and remote)
@@ -203,8 +204,8 @@ class GitActivityTracker:
         username: str,
         since: str,
         until: str,
-        branches: Optional[list[str]] = None,
-    ) -> list[Commit]:
+        branches: Optional[List[str]] = None,
+    ) -> List[Commit]:
         """Get all commits for the repository within date range, filtered by author"""
 
         if not branches:
@@ -354,9 +355,26 @@ class GitActivityTracker:
 
         return daily_work_summary
 
+    def _process_single_repo(
+        self, repo_path: str, username: str, since: str, until: str
+    ) -> Tuple[str, str, List[Commit], Optional[str]]:
+        """Process a single repository and return results for thread-safe processing"""
+        try:
+            # Create a tracker for this repository
+            temp_tracker = GitActivityTracker(repo_path=repo_path, debug=self.debug)
+
+            repo_name = temp_tracker.get_repo_name()
+            commits = temp_tracker.get_commits_for_repo(username, since, until)
+
+            return repo_path, repo_name, commits, None
+
+        except Exception as e:
+            self.debug_log(f"Error processing repository {repo_path}: {e}")
+            return repo_path, os.path.basename(repo_path), [], str(e)
+
     def get_multiple_repos_daily_work(
         self,
-        repo_paths: list[str],
+        repo_paths: List[str],
         username: str,
         target_date_range: pendulum.Interval,
     ) -> str:
@@ -380,44 +398,66 @@ class GitActivityTracker:
         all_commits_by_day = {}
         repo_summaries = []
 
-        for repo_path in repo_paths:
-            print(f"Processing repository: {os.path.basename(repo_path)}")
+        # Process repositories concurrently using ThreadPoolExecutor
+        max_workers = min(len(repo_paths), 10)  # Limit to 10 concurrent workers
 
-            # Create a temporary tracker for this repository
-            temp_tracker = GitActivityTracker(repo_path=repo_path, debug=self.debug)
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            # Submit all repository processing tasks
+            future_to_repo = {
+                executor.submit(
+                    self._process_single_repo, repo_path, username, since, until
+                ): repo_path
+                for repo_path in repo_paths
+            }
 
-            try:
-                repo_name = temp_tracker.get_repo_name()
-                commits = temp_tracker.get_commits_for_repo(username, since, until)
+            # Collect results as they complete
+            for future in as_completed(future_to_repo):
+                repo_path = future_to_repo[future]
+                print(f"Processing repository: {os.path.basename(repo_path)}")
 
-                if commits:
-                    combined_report += f"## Repository: {repo_name}\n\n"
-                    combined_report += f"**Path:** {repo_path}\n"
-                    combined_report += f"**Commits:** {len(commits)}\n\n"
+                try:
+                    repo_path_result, repo_name, commits, error = future.result()
 
-                    for commit in commits:
-                        combined_report += str(commit)
+                    if error:
+                        self.debug_log(
+                            f"Error processing repository {repo_path}: {error}"
+                        )
+                        repo_summaries.append(
+                            f"- **{repo_name}**: Error processing repository"
+                        )
+                    else:
+                        if commits:
+                            combined_report += f"## Repository: {repo_name}\n\n"
+                            combined_report += f"**Path:** {repo_path_result}\n"
+                            combined_report += f"**Commits:** {len(commits)}\n\n"
 
-                    combined_report += "\n"
-                    total_commits += len(commits)
+                            for commit in commits:
+                                combined_report += str(commit)
 
-                    # Aggregate commits by day
-                    for commit in commits:
-                        day = commit.commit_date.format("YYYY-MM-DD")
-                        if day not in all_commits_by_day:
-                            all_commits_by_day[day] = 0
-                        all_commits_by_day[day] += 1
+                            combined_report += "\n"
+                            total_commits += len(commits)
 
-                    repo_summaries.append(f"- **{repo_name}**: {len(commits)} commits")
-                else:
-                    self.debug_log(f"No commits found in {repo_name}")
-                    repo_summaries.append(f"- **{repo_name}**: 0 commits")
+                            # Aggregate commits by day
+                            for commit in commits:
+                                day = commit.commit_date.format("YYYY-MM-DD")
+                                if day not in all_commits_by_day:
+                                    all_commits_by_day[day] = 0
+                                all_commits_by_day[day] += 1
 
-            except Exception as e:
-                self.debug_log(f"Error processing repository {repo_path}: {e}")
-                repo_summaries.append(
-                    f"- **{os.path.basename(repo_path)}**: Error processing repository"
-                )
+                            repo_summaries.append(
+                                f"- **{repo_name}**: {len(commits)} commits"
+                            )
+                        else:
+                            self.debug_log(f"No commits found in {repo_name}")
+                            repo_summaries.append(f"- **{repo_name}**: 0 commits")
+
+                except Exception as e:
+                    self.debug_log(
+                        f"Error getting result for repository {repo_path}: {e}"
+                    )
+                    repo_summaries.append(
+                        f"- **{os.path.basename(repo_path)}**: Error processing repository"
+                    )
 
         # Add summary section
         combined_report += "## Summary\n\n"
