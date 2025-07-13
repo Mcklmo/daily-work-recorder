@@ -143,9 +143,13 @@ class NotionWorkRecorder:
             },
         )
 
+        data = response.json()
+        if data.get("object") == "error":
+            raise Exception(data.get("message"))
+
         response.raise_for_status()
 
-        return response.json()
+        return data
 
     def create_daily_summary(
         self,
