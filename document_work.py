@@ -6,6 +6,7 @@ from notion_client import Client
 import argparse
 import json
 import dotenv
+import requests
 
 dotenv.load_dotenv()
 
@@ -33,6 +34,7 @@ class NotionWorkRecorder:
         self.debug = debug
         self.notion = Client(auth=notion_token)
         self.database_id = database_id
+        self.notion_token = notion_token
 
         # Validate the database connection
         self._validate_database()
@@ -94,56 +96,56 @@ class NotionWorkRecorder:
         Returns:
             The created page object from Notion
         """
-        if date is None:
-            date = pendulum.now()
-
-        # Build the properties for the new page
-        properties = {}
-
-        schema = self.get_database_schema()
-
-        date_properties = [
-            name for name, details in schema.items() if details.get("type") == "date"
-        ]
-        for date_prop in date_properties:
-            properties[date_prop] = {"date": {"start": date.to_date_string()}}
-
-        text_properties = [
-            prop_name
-            for prop_name, details in schema.items()
-            if details.get("type") == "rich_text"
-            and prop_name.lower() in ["description", "notes", "details"]
-        ]
-
-        for text_prop in text_properties:
-            properties[text_prop] = {"rich_text": [{"text": {"content": description}}]}
-
-        for prop_name, prop_value in additional_properties.items():
-            if prop_name not in schema:
-                raise ValueError(f"Property {prop_name} not found in schema")
-
-            properties[prop_name] = prop_value
-
-        self.debug_log("Creating page with properties", properties)
-
-        properties["Created by"] = {
-            "people": [
-                {
-                    "object": "user",
-                    "id": "9b0092bf-47c7-465c-b5ac-5760d0450d07",
-                }
-            ]
-        }
-
-        # Create the page
-        page = self.notion.pages.create(
-            parent={"database_id": self.database_id},
-            properties=properties,
+        response = requests.post(
+            "https://api.notion.com/v1/pages",
+            headers={
+                "Authorization": f"Bearer {self.notion_token}",
+                "Content-Type": "application/json",
+                "Notion-Version": "2022-06-28",
+            },
+            json={
+                "parent": {"database_id": self.database_id},
+                "properties": {
+                    "Created by": {
+                        "people": [
+                            {
+                                "object": "user",
+                                "id": "9b0092bf-47c7-465c-b5ac-5760d0450d07",
+                            }
+                        ]
+                    },
+                    "Date": {
+                        "date": {
+                            "start": date.to_date_string(),
+                        }
+                    },
+                    "Hours": {
+                        "number": 0,
+                    },
+                    "Project code": {
+                        "select": {"name": "test"},
+                    },
+                },
+                "children": [
+                    {
+                        "object": "block",
+                        "type": "paragraph",
+                        "paragraph": {
+                            "rich_text": [
+                                {
+                                    "type": "text",
+                                    "text": {"content": "test"},
+                                }
+                            ]
+                        },
+                    }
+                ],
+            },
         )
 
-        logger.info(f"Created work record: {title}")
-        self.debug_log("Created page", page)
-        return page
+        response.raise_for_status()
+
+        return response.json()
 
     def create_daily_summary(
         self,
