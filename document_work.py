@@ -89,6 +89,15 @@ class NotionWorkRecorder:
 
         return all_projects["results"][0]["id"]
 
+    def get_user_id(self, user_name: str) -> str:
+        all_users = self.notion.users.list()
+
+        for user in all_users["results"]:
+            if user["name"] == user_name:
+                return user["id"]
+
+        raise Exception(f"User {user_name} not found")
+
     def create_work_record(
         self,
         title: str,
@@ -129,7 +138,7 @@ class NotionWorkRecorder:
                         "people": [
                             {
                                 "object": "user",
-                                "id": "9b0092bf-47c7-465c-b5ac-5760d0450d07",
+                                "id": self.get_user_id("Moritz Marcus Hönscheidt"),
                             }
                         ]
                     },
