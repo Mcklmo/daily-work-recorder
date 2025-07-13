@@ -69,40 +69,7 @@ class NotionWorkRecorder:
         response.raise_for_status()
         return response.json()
 
-    def find_page_by_title(self, database_id: str, title: str) -> Optional[str]:
-        """
-        Find a page in a database by its title
-
-        Args:
-            database_id: The ID of the database to search in
-            title: The title to search for
-
-        Returns:
-            The page ID if found, None otherwise
-        """
-        response = requests.post(
-            f"https://api.notion.com/v1/databases/{database_id}/query",
-            headers={
-                "Authorization": f"Bearer {self.notion_token}",
-                "Content-Type": "application/json",
-                "Notion-Version": "2022-06-28",
-            },
-            json={
-                "filter": {
-                    "property": "title",
-                    "rich_text": {"equals": "Time registration codes"},
-                }
-            },
-        )
-
-        if response.status_code == 200:
-            data = response.json()
-            if data.get("results"):
-                return data["results"][0]["id"]
-
-        return None
-
-    def get_project_code_database_id(self) -> Optional[str]:
+    def get_project_code_id(self, project_name: str) -> Optional[str]:
         """
         Get the database ID that the Project code relation property references
 
@@ -111,11 +78,16 @@ class NotionWorkRecorder:
         """
         schema = self.get_database_schema()
         project_code_prop = schema.get("properties", {}).get("Project code")
+        time_registration_codes_db_id = project_code_prop.get("relation", {}).get(
+            "database_id"
+        )
 
-        if project_code_prop and project_code_prop.get("type") == "relation":
-            return project_code_prop.get("relation", {}).get("database_id")
+        all_projects = self.notion.databases.query(
+            database_id=time_registration_codes_db_id,
+            filter={"property": "title", "rich_text": {"equals": project_name}},
+        )
 
-        return None
+        return all_projects["results"][0]["id"]
 
     def create_work_record(
         self,
@@ -172,7 +144,7 @@ class NotionWorkRecorder:
                     "Project code": {
                         "relation": [
                             {
-                                "id": "12320972-3be0-80cd-84da-e2550442ac9f",
+                                "id": self.get_project_code_id("Danske Commodities"),
                             }
                         ]
                     },
@@ -199,6 +171,7 @@ class NotionWorkRecorder:
             raise Exception(data.get("message"))
 
         response.raise_for_status()
+
         return data
 
     def create_daily_summary(
