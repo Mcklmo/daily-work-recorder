@@ -100,13 +100,11 @@ class NotionWorkRecorder:
 
     def create_work_record(
         self,
-        title: str,
-        description: str = "",
-        date: Optional[pendulum.DateTime] = None,
-        tags: Optional[List[str]] = None,
-        duration: Optional[int] = None,
-        project: Optional[str] = None,
-        **additional_properties,
+        description: str,
+        date: pendulum.DateTime,
+        duration: int,
+        project: str,
+        user_name: str,
     ) -> Dict[str, Any]:
         """
         Create a work record in Notion
@@ -138,7 +136,7 @@ class NotionWorkRecorder:
                         "people": [
                             {
                                 "object": "user",
-                                "id": self.get_user_id("Moritz Marcus Hönscheidt"),
+                                "id": self.get_user_id(user_name),
                             }
                         ]
                     },
@@ -148,12 +146,12 @@ class NotionWorkRecorder:
                         }
                     },
                     "Hours": {
-                        "number": 0,
+                        "number": duration,
                     },
                     "Project code": {
                         "relation": [
                             {
-                                "id": self.get_project_code_id("Danske Commodities"),
+                                "id": self.get_project_code_id(project),
                             }
                         ]
                     },
@@ -166,7 +164,7 @@ class NotionWorkRecorder:
                             "rich_text": [
                                 {
                                     "type": "text",
-                                    "text": {"content": description or ""},
+                                    "text": {"content": description},
                                 }
                             ]
                         },
@@ -256,7 +254,6 @@ class NotionWorkRecorder:
 
 
 def main():
-    """Main function to demonstrate usage"""
     parser = argparse.ArgumentParser(description="Record work activities to Notion")
     parser.add_argument(
         "--notion-token",
@@ -268,80 +265,61 @@ def main():
         "--database-id",
         type=str,
         help="Notion database ID (or set NOTION_DATABASE_ID environment variable)",
-        default=os.getenv("NOTION_DATABASE_ID"),
+        default="ccfdf76c30084572b6699f2aada638cc",
     )
     parser.add_argument(
-        "--title",
+        "--duration",
+        "-d",
+        type=int,
+        help="Work duration in hours",
+        default=0,
+    )
+    parser.add_argument(
+        "--text",
+        "-t",
         type=str,
-        help="Title of the work record",
-        default="Sample Work Record",
+        help="Description of the work",
+        default="I did some work",
     )
     parser.add_argument(
-        "--description",
+        "--project",
+        "-p",
         type=str,
-        help="Description of the work done",
-        default="This is a sample work record created by the document_work.py script",
+        help="Project name",
+        default="Danske Commodities",
     )
     parser.add_argument(
-        "--project", type=str, help="Project name", default="Daily Work Recorder"
-    )
-    parser.add_argument(
-        "--tags",
+        "--user-name",
+        "-u",
         type=str,
-        help="Comma-separated list of tags",
-        default="development,python,automation",
-    )
-    parser.add_argument("--duration", type=int, help="Duration in minutes", default=30)
-    parser.add_argument(
-        "--debug",
-        action="store_true",
-        help="Enable debug mode",
-        default=True,
+        help="User name",
+        default="Moritz Marcus Hönscheidt",
     )
     parser.add_argument(
-        "--show-schema", action="store_true", help="Show the database schema and exit"
+        "--date",
+        "-D",
+        type=str,
+        help="Date of the work (YYYY-MM-DD)",
+        default=pendulum.now().to_date_string(),
     )
 
     args = parser.parse_args()
 
-    # Validate required arguments
     if not args.notion_token:
         logger.error(
-            "Notion token is required. Set NOTION_TOKEN environment variable or use --notion-token"
+            "Notion token is required. Set NOTION_TOKEN environment variable or use --notion-token <token>"
         )
         return 1
 
-    if not args.database_id:
-        logger.error(
-            "Database ID is required. Set NOTION_DATABASE_ID environment variable or use --database-id"
-        )
-        return 1
-
-    # Initialize the recorder
-    recorder = NotionWorkRecorder(
+    result = NotionWorkRecorder(
         notion_token=args.notion_token,
         database_id=args.database_id,
-        debug=args.debug,
-    )
-
-    # Show schema if requested
-    if args.show_schema:
-        schema = recorder.get_database_schema()
-        print("Database Schema:")
-        for prop_name, prop_details in schema.items():
-            print(f"  {prop_name}: {prop_details['type']}")
-        return 0
-
-    # Create a sample work record
-    tags = [tag.strip() for tag in args.tags.split(",") if tag.strip()]
-
-    result = recorder.create_work_record(
-        title=args.title,
-        description=args.description,
-        date=pendulum.now(),
-        tags=tags,
+    ).create_work_record(
+        description=args.text,
+        date=pendulum.parse(args.date),
         duration=args.duration,
         project=args.project,
+        user_name=args.user_name,
     )
 
     print(f"Successfully created work record: {result['id']}")
