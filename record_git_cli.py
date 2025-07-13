@@ -454,12 +454,16 @@ class GitActivityTracker:
 
             structured_commits[day].append((commit_repo_name, commit))
 
+        report_by_day = {}
+
         for day, repo_commits in structured_commits.items():
             day_report = self.create_day_report(day, repo_commits)
 
             filename = f"git_report_multi_{day}.md"
             with open(filename, "w") as f:
                 f.write(day_report)
+
+            report_by_day[day] = day_report
 
         if all_commits_by_day:
             combined_report += f"- **Days with commits**: {len(all_commits_by_day)}\n"
@@ -477,7 +481,11 @@ class GitActivityTracker:
         if total_commits == 0:
             return f"No git activity found for {username} in any repositories during the specified period."
 
-        return combined_report
+        filename = f"git_report_multi_{target_date_range.start.format('YYYY-MM-DD')}_to_{target_date_range.end.format('YYYY-MM-DD')}.md"
+        with open(filename, "w") as f:
+            f.write(combined_report)
+
+        return report_by_day
 
     def create_day_report(self, day: str, repo_commits: List[Tuple[str, str]]) -> str:
         day_report = f"# Git history for {day}\n\n"
@@ -486,140 +494,3 @@ class GitActivityTracker:
             day_report += f"* {repo_name_fmt}: {commit}\n"
 
         return day_report
-
-
-def main():
-    # Parse command line arguments
-    parser = argparse.ArgumentParser(description="Generate Git activity reports")
-    parser.add_argument(
-        "--repo-path",
-        "-r",
-        type=str,
-        help="Path to the git repository (default: current directory)",
-        default="/Users/moritzmarcushonscheidt/Projects/work/bct/",
-    )
-    parser.add_argument(
-        "--username",
-        "-u",
-        type=str,
-        help="Git username to filter by (default: from GITHUB_USERNAME env var)",
-        default="mcklmo",
-    )
-    parser.add_argument(
-        "--start-date",
-        "-s",
-        type=str,
-        help="Start date for the report (YYYY-MM-DD format)",
-        default=pendulum.now().start_of("month").to_date_string(),
-    )
-    parser.add_argument(
-        "--end-date",
-        "-e",
-        type=str,
-        help="End date for the report (YYYY-MM-DD format)",
-        default=pendulum.tomorrow().to_date_string(),
-    )
-    parser.add_argument(
-        "--traverse",
-        "-t",
-        action="store_true",
-        help="Traverse subdirectories to find git repositories (max depth 1)",
-        default=True,
-    )
-    parser.add_argument(
-        "--max-depth",
-        type=int,
-        help="Maximum depth for directory traversal (default: 1)",
-        default=2,
-    )
-    parser.add_argument("--debug", "-d", action="store_true", help="Enable debug mode")
-
-    args = parser.parse_args()
-
-    # Load environment variables
-    GITHUB_USERNAME = args.username or os.getenv("GITHUB_USERNAME", "mcklmo")
-    DEBUG = args.debug or os.getenv("DEBUG", "false").lower() == "true"
-    REPO_PATH = args.repo_path or os.getenv("REPO_PATH")
-
-    # Set date range
-    if args.start_date:
-        start = pendulum.parse(args.start_date)
-    else:
-        start = pendulum.parse("2025-01-01")
-
-    if args.end_date:
-        end = pendulum.parse(args.end_date)
-    else:
-        end = pendulum.parse("2025-01-12")
-
-    period = pendulum.interval(start, end)
-
-    # Debug information
-    print(f"[DEBUG] Today: {end}")
-    print(f"[DEBUG] Start date: {start}")
-    print(f"[DEBUG] Period start: {period.start}")
-    print(f"[DEBUG] Period end: {period.end}")
-    print(f"[DEBUG] Period duration: {period.in_words()}")
-
-    print(f"Generating Git activity report for {GITHUB_USERNAME}")
-    print(
-        f"Period: {period.start.format('YYYY-MM-DD')} to {period.end.format('YYYY-MM-DD')}"
-    )
-
-    if args.traverse:
-        # Traverse mode: find multiple git repositories
-        print("Traverse mode enabled - scanning for git repositories...")
-
-        # Create a tracker for directory traversal
-        temp_tracker = GitActivityTracker(debug=DEBUG)
-        root_path = REPO_PATH or os.getcwd()
-
-        print(f"Scanning directory: {root_path}")
-        git_repos = temp_tracker.find_git_repos_in_directory(root_path, args.max_depth)
-
-        if not git_repos:
-            print(f"No git repositories found in {root_path}")
-            exit(1)
-
-        print(f"Found {len(git_repos)} git repositories:")
-        for repo in git_repos:
-            print(f"  - {repo}")
-
-        # Generate combined report for all repositories
-        report = temp_tracker.get_multiple_repos_daily_work(
-            git_repos, GITHUB_USERNAME, period
-        )
-
-        # Save report to file
-        root_name = os.path.basename(root_path) or "workspace"
-        filename = f"git_report_multi_{root_name}_{period.start.format('YYYY-MM-DD')}_to_{period.end.format('YYYY-MM-DD')}.md"
-        with open(filename, "w") as f:
-            f.write(report)
-        print(f"\nCombined report saved to: {filename}")
-
-    else:
-        # Single repository mode
-        try:
-            tracker = GitActivityTracker(repo_path=REPO_PATH, debug=DEBUG)
-        except ValueError as e:
-            print(f"Error: {e}")
-            if REPO_PATH:
-                print(f"Please ensure {REPO_PATH} is a valid git repository.")
-            else:
-                print(
-                    "Please run this script from within a git repository or provide a --repo-path argument."
-                )
-            exit(1)
-
-        report = tracker.get_git_daily_work(GITHUB_USERNAME, period)
-
-        # Save report to file
-        repo_name = tracker.get_repo_name()
-        filename = f"git_report_{repo_name}_{period.start.format('YYYY-MM-DD')}_to_{period.end.format('YYYY-MM-DD')}.md"
-        with open(filename, "w") as f:
-            f.write(report)
-        print(f"\nReport saved to: {filename}")
-
-
-if __name__ == "__main__":
-    main()
