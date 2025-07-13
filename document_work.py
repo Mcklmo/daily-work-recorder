@@ -58,18 +58,64 @@ class NotionWorkRecorder:
         return database
 
     def get_database_schema(self) -> Dict[str, Any]:
-        database = self.notion.databases.retrieve(database_id=self.database_id)
-        properties = database.get("properties", {})
+        """Get the schema of the database"""
+        response = requests.get(
+            f"https://api.notion.com/v1/databases/{self.database_id}",
+            headers={
+                "Authorization": f"Bearer {self.notion_token}",
+                "Notion-Version": "2022-06-28",
+            },
+        )
+        response.raise_for_status()
+        return response.json()
 
-        schema = {}
-        for prop_name, prop_details in properties.items():
-            schema[prop_name] = {
-                "type": prop_details.get("type"),
-                "id": prop_details.get("id"),
-            }
+    def find_page_by_title(self, database_id: str, title: str) -> Optional[str]:
+        """
+        Find a page in a database by its title
 
-        self.debug_log("Database schema", schema)
-        return schema
+        Args:
+            database_id: The ID of the database to search in
+            title: The title to search for
+
+        Returns:
+            The page ID if found, None otherwise
+        """
+        response = requests.post(
+            f"https://api.notion.com/v1/databases/{database_id}/query",
+            headers={
+                "Authorization": f"Bearer {self.notion_token}",
+                "Content-Type": "application/json",
+                "Notion-Version": "2022-06-28",
+            },
+            json={
+                "filter": {
+                    "property": "title",
+                    "rich_text": {"equals": "Time registration codes"},
+                }
+            },
+        )
+
+        if response.status_code == 200:
+            data = response.json()
+            if data.get("results"):
+                return data["results"][0]["id"]
+
+        return None
+
+    def get_project_code_database_id(self) -> Optional[str]:
+        """
+        Get the database ID that the Project code relation property references
+
+        Returns:
+            The database ID if found, None otherwise
+        """
+        schema = self.get_database_schema()
+        project_code_prop = schema.get("properties", {}).get("Project code")
+
+        if project_code_prop and project_code_prop.get("type") == "relation":
+            return project_code_prop.get("relation", {}).get("database_id")
+
+        return None
 
     def create_work_record(
         self,
@@ -82,11 +128,11 @@ class NotionWorkRecorder:
         **additional_properties,
     ) -> Dict[str, Any]:
         """
-        Create a work record in the Notion database
+        Create a work record in Notion
 
         Args:
             title: Title of the work record
-            description: Description of the work done
+            description: Description of the work
             date: Date of the work (defaults to today)
             tags: List of tags for the work
             duration: Duration in minutes
@@ -96,6 +142,7 @@ class NotionWorkRecorder:
         Returns:
             The created page object from Notion
         """
+
         response = requests.post(
             "https://api.notion.com/v1/pages",
             headers={
@@ -123,7 +170,11 @@ class NotionWorkRecorder:
                         "number": 0,
                     },
                     "Project code": {
-                        "select": {"name": "test"},
+                        "relation": [
+                            {
+                                "id": "12320972-3be0-80cd-84da-e2550442ac9f",
+                            }
+                        ]
                     },
                 },
                 "children": [
@@ -134,7 +185,7 @@ class NotionWorkRecorder:
                             "rich_text": [
                                 {
                                     "type": "text",
-                                    "text": {"content": "test"},
+                                    "text": {"content": description or ""},
                                 }
                             ]
                         },
@@ -148,7 +199,6 @@ class NotionWorkRecorder:
             raise Exception(data.get("message"))
 
         response.raise_for_status()
-
         return data
 
     def create_daily_summary(
