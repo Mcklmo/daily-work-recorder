@@ -1,263 +1,74 @@
-# Daily Work Recorder
+# BCT Git Activity Tracker for Notion
 
-A Python tool for tracking and reporting daily work activities from git repositories. This project provides two implementations:
+This CLI tool scans your local directories for git repositories, finds commits for a given day, and creates a work record for that day in Notion.
 
-1. **GitHub API Version** (`record.py`) - Fetches data from GitHub API across multiple repositories in an organization
-2. **Git CLI Version** (`record_git_cli.py`) - Uses local git commands to analyze the current repository
+## Prerequisites
 
-## Features
+- Python 3.12
+- Notion API key
+- Notion database id
 
-### GitHub API Version (`record.py`)
+### Environment Variables
 
-- Fetches commits across multiple repositories in a GitHub organization
-- Supports filtering by specific repositories
-- Tracks commits, pull requests, and reviews
-- Requires GitHub API token
-- Works with remote repositories without local clones
+Can be added to a `.env` file in the root of the project.
 
-### Git CLI Version (`record_git_cli.py`)
-
-- Analyzes commits in the current local git repository
-- Works with any git repository (GitHub, GitLab, Bitbucket, etc.)
-- No API tokens required
-- Faster for single repository analysis
-- Works offline with local git history
-
-## Installation
-
-1. Clone this repository:
-
-```bash
-git clone <repository-url>
-cd daily-work-recorder
+```env
+NOTION_API_KEY=your_notion_api_key
+NOTION_DATABASE_ID=your_notion_database_id
 ```
 
-2. Install dependencies:
+### Initialize virtual environment
 
 ```bash
+python3 -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
-```
-
-3. Set up environment variables:
-
-```bash
-# Copy the example environment file
-cp .env.example .env
-
-# Edit .env with your settings
-GITHUB_USERNAME=your-username
-DEBUG=false
-
-# For GitHub API version only:
-GITHUB_TOKEN=your-github-token
-GITHUB_ORG=your-organization
-GITHUB_REPO_FILTER=repo1,repo2  # Optional: comma-separated list
 ```
 
 ## Usage
 
-### Git CLI Version (Recommended for single repository)
+```bash
+python3 src/main.py --help
+```
 
-The Git CLI version is simpler and works with any git repository:
+### Supported Arguments
 
 ```bash
-# Run from within any git repository
-python record_git_cli.py
+usage: main.py [-h] -r WORK_REPOSITORY_PATH -g GIT_USERNAME -p NOTION_PROJECT -n NOTION_USER_NAME [-dh DURATION_HOURS] [-d DATE]
 
-# Or specify a different repository path
-python record_git_cli.py --repo-path /path/to/your/repo
+Generate Git activity reports for Notion
 
-# With custom date range and username
-python record_git_cli.py --repo-path ~/Projects/my-app --username johndoe --start-date 2025-01-01 --end-date 2025-01-15
-
-# Show all available options
-python record_git_cli.py --help
+options:
+  -h, --help            show this help message and exit
+  -r WORK_REPOSITORY_PATH, --work-repository-path WORK_REPOSITORY_PATH
+                        Path to the work repository
+  -g GIT_USERNAME, --git-username GIT_USERNAME
+                        git username to filter by
+  -p NOTION_PROJECT, --notion-project NOTION_PROJECT
+                        Notion project name
+  -n NOTION_USER_NAME, --notion-user-name NOTION_USER_NAME
+                        Notion user name
+  -dh DURATION_HOURS, --duration-hours DURATION_HOURS
+                        Work duration in hours (default: 0)
+  -d DATE, --date DATE  Date of the work (YYYY-MM-DD) (default: today)
 ```
 
-**Command Line Options:**
-
-- `--repo-path` / `-r`: Path to the git repository (default: current directory)
-- `--username` / `-u`: Git username to filter by (default: from GITHUB_USERNAME env var)
-- `--start-date` / `-s`: Start date for the report (YYYY-MM-DD format)
-- `--end-date` / `-e`: End date for the report (YYYY-MM-DD format)
-- `--debug` / `-d`: Enable debug mode
-
-Or use the example script:
+### Example Usage
 
 ```bash
-python example_usage_git_cli.py
+python3 src/main.py --date 2025-07-18 --work-repository-path /Users/moritzmarcushonscheidt/Projects/ --git-username mcklmo --notion-project "Heads" --notion-user-name "Moritz Marcus Hönscheidt" --duration-hours 0
 ```
 
-**Key Features:**
+### Example Output
 
-- Works with any git repository on your machine
-- Automatically detects git repository in current directory or parent directories
-- Analyzes all branches for commits
-- Generates detailed reports with daily breakdowns
-- No external API dependencies
-
-### GitHub API Version (For multiple repositories)
-
-For analyzing multiple repositories in a GitHub organization:
-
-```bash
-python record.py
-```
-
-Or use the example script:
-
-```bash
-python example_usage.py
-```
-
-**Requirements:**
-
-- GitHub Personal Access Token with appropriate permissions
-- Access to the GitHub organization
-- Internet connection
-
-## Configuration
-
-### Environment Variables
-
-Create a `.env` file in the project root:
-
-```env
-# Common settings
-GITHUB_USERNAME=your-username
-DEBUG=false
-
-# Git CLI version only
-REPO_PATH=/path/to/your/repo  # Optional: repository path
-
-# GitHub API version only
-GITHUB_TOKEN=your-github-personal-access-token
-GITHUB_ORG=your-organization-name
-GITHUB_REPO_FILTER=repo1,repo2,repo3  # Optional: specific repositories
-```
-
-### GitHub Token Setup (API version only)
-
-1. Go to GitHub Settings > Developer settings > Personal access tokens
-2. Generate a new token with these scopes:
-   - `repo` - Full control of private repositories
-   - `read:org` - Read organization membership
-   - `read:user` - Read user profile data
-
-## Output
-
-Both versions generate markdown reports with:
-
-- **Summary statistics** (total commits, active days, etc.)
-- **Detailed commit list** with timestamps, messages, and links
-- **Daily breakdown** showing commits per day
-- **Repository information** and date ranges
-
-Example output:
+The output is also written to a markdown file in the current directory.
 
 ```markdown
-# Git Activity Report for username
+# Git history for 2025-07-18
 
-**Repository:** my-project
-**Period:** 2025-01-01 to 2025-01-15
-**Repository Path:** /path/to/repo
-
-## Commits (42)
-
-- `2025-01-15 10:30:00` **Add new feature** (abc1234) by John Doe
-- `2025-01-14 16:45:00` **Fix bug in authentication** (def5678) by John Doe
-...
-
-## Summary
-
-- **Total Commits**: 42
-- **Days with commits**: 8
-- **Average commits per day**: 5.3
-
-### Daily Breakdown
-
-- **2025-01-15**: 3 commits
-- **2025-01-14**: 7 commits
-...
+* ACE.Pythonscrapers.gme                       : `2025-07-18 14:49:51` (232daec24410a4b78f31459c452d9f57f9bdd653) **[DO-716] migrate to new ftps server**
+* ACE.PythonScrapers.Southpool                 : `2025-07-18 13:23:32` (771601e124b2b540e64e093e4cd9d3be1e1f4227) **[DATAP-6733] extend schedule to 12:44-13.30**
+* ACE.PythonScrapers.isone                     : `2025-07-18 09:39:05` (7c4ad639bcffd4ec320aa776ed79dbc43aea8c3f) **Revert "[test] add new schedule for debugging"**
+* ACE.PythonScrapers.Southpool                 : `2025-07-18 09:33:40` (e0d73bdad809d26086f824e41a288a1d9d0a9c5e) **[DATAP-6733] fix broken cron job**
+* ACE.PythonScrapers.meteocontrol              : `2025-07-18 07:40:25` (0b2293cacc30071f1f55c9263046f82eea56fb92) **[alert2333582] raise ttl and request timeout**
 ```
-
-## Comparison: Git CLI vs GitHub API
-
-| Feature | Git CLI | GitHub API |
-|---------|---------|------------|
-| **Setup** | Simple | Requires API token |
-| **Speed** | Fast | Slower (API calls) |
-| **Repositories** | Single (via path) | Multiple |
-| **Offline** | Yes | No |
-| **Git Providers** | Any | GitHub only |
-| **Branch Analysis** | All branches | All branches |
-| **PR/Review Data** | No | Yes |
-| **Dependencies** | Git CLI only | Internet + API access |
-
-## Development
-
-### Project Structure
-
-```
-daily-work-recorder/
-├── record.py                 # GitHub API implementation
-├── record_git_cli.py         # Git CLI implementation
-├── example_usage.py          # GitHub API examples
-├── example_usage_git_cli.py  # Git CLI examples
-├── requirements.txt          # Python dependencies
-├── README.md                 # This file
-└── .env                      # Environment variables (create this)
-```
-
-### Testing
-
-Run the example scripts to test both implementations:
-
-```bash
-# Test Git CLI version (must be in a git repository)
-python example_usage_git_cli.py
-
-# Test GitHub API version (requires API token)
-python example_usage.py
-```
-
-## Common Issues
-
-### Git CLI Version
-
-1. **"No git repository found"**
-   - Ensure you're running the script from within a git repository
-   - Check that `.git` folder exists in current or parent directories
-   - Use `--repo-path` to specify a different repository location
-
-2. **"No git repository found at: /path/to/repo"**
-   - Verify the path exists and contains a `.git` folder
-   - Check file permissions for the repository directory
-   - Use absolute paths or properly expand `~` in paths
-
-3. **No commits found**
-   - Verify the date range includes your commits
-   - Check that your git author name/email matches the username filter
-
-### GitHub API Version
-
-1. **"Error: GITHUB_TOKEN environment variable not set"**
-   - Create a GitHub Personal Access Token
-   - Add it to your `.env` file
-
-2. **"No repositories found"**
-   - Verify organization name is correct
-   - Check that your token has `read:org` permission
-   - Ensure you're a member of the organization
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests if applicable
-5. Submit a pull request
-
-## License
-
-This project is licensed under the MIT License - see the LICENSE file for details.

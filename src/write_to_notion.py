@@ -33,7 +33,9 @@ class NotionWorkRecorder:
 
     def get_project_code_id(self, project_name: str) -> Optional[str]:
         schema = self.get_database_schema()
-        project_code_prop = schema.get("properties", {}).get("Project code")
+        project_code_prop = schema.get("properties", {}).get(
+            "Project code"
+        )  # In our notion setup, the Project code relation contains our project reference
         time_registration_codes_db_id = project_code_prop.get("relation", {}).get(
             "database_id"
         )

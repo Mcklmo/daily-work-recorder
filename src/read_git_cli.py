@@ -1,20 +1,10 @@
 import subprocess
 import os
-import argparse
 import pendulum
 from typing import Any, Optional, List, Tuple
 import json
-import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
-
-
-logger = logging.getLogger(__name__)
-
-# configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-)
+from logger import logger
 
 
 def print(message: str):
@@ -54,36 +44,36 @@ class GitActivityTracker:
     def _find_git_repo(self, repo_path: Optional[str] = None) -> Optional[str]:
         """Find the git repository root by looking for .git folder"""
         if repo_path:
-            # Use provided path
+
             repo_path = os.path.abspath(os.path.expanduser(repo_path))
             if os.path.isdir(repo_path):
-                # Check if the provided path contains .git
+
                 if os.path.isdir(os.path.join(repo_path, ".git")):
                     return repo_path
 
-                # Search parent directories
                 current_dir = repo_path
-                while current_dir != os.path.dirname(current_dir):  # Not at root
+                while current_dir != os.path.dirname(current_dir):
                     if os.path.isdir(os.path.join(current_dir, ".git")):
                         return current_dir
                     current_dir = os.path.dirname(current_dir)
             return None
         else:
-            # Use current directory logic
+
             current_dir = os.getcwd()
-            while current_dir != os.path.dirname(current_dir):  # Not at root
+            while current_dir != os.path.dirname(current_dir):
                 if os.path.isdir(os.path.join(current_dir, ".git")):
                     return current_dir
                 current_dir = os.path.dirname(current_dir)
 
-            # Check if current directory has .git
             if os.path.isdir(os.path.join(os.getcwd(), ".git")):
                 return os.getcwd()
 
             return None
 
     def find_git_repos_in_directory(
-        self, root_path: str, max_depth: int = 1
+        self,
+        root_path: str,
+        max_depth: int = 1,
     ) -> List[str]:
         """Find all git repositories in a directory with max depth traversal"""
         git_repos = []
@@ -93,43 +83,25 @@ class GitActivityTracker:
             self.debug_log(f"Root path is not a directory: {root_path}")
             return git_repos
 
-        # Check if the root path itself is a git repository
         if os.path.isdir(os.path.join(root_path, ".git")):
             git_repos.append(root_path)
             self.debug_log(f"Found git repository at root: {root_path}")
 
-        # Traverse subdirectories up to max_depth
-        if max_depth > 0:
-            try:
-                for item in os.listdir(root_path):
-                    item_path = os.path.join(root_path, item)
+        for item in os.listdir(root_path):
+            item_path = os.path.join(root_path, item)
 
-                    # Skip if not a directory
-                    if not os.path.isdir(item_path):
-                        continue
+            if not os.path.isdir(item_path):
+                continue
 
-                    # Skip hidden directories (except .git which we already checked)
-                    if item.startswith(".") and item != ".git":
-                        continue
+            if item.startswith(".") and item != ".git":
+                continue
 
-                    # Check if this subdirectory is a git repository
-                    if os.path.isdir(os.path.join(item_path, ".git")):
-                        git_repos.append(item_path)
-                        self.debug_log(f"Found git repository: {item_path}")
-
-                    # Recurse into subdirectories if we haven't reached max depth
-                    elif max_depth > 1:
-                        sub_repos = self.find_git_repos_in_directory(
-                            item_path, max_depth - 1
-                        )
-                        git_repos.extend(sub_repos)
-
-            except PermissionError as e:
-                self.debug_log(
-                    f"Permission denied accessing directory: {root_path} - {e}"
-                )
-            except Exception as e:
-                self.debug_log(f"Error traversing directory: {root_path} - {e}")
+            if os.path.isdir(os.path.join(item_path, ".git")):
+                git_repos.append(item_path)
+                self.debug_log(f"Found git repository: {item_path}")
+            else:
+                sub_repos = self.find_git_repos_in_directory(item_path, max_depth - 1)
+                git_repos.extend(sub_repos)
 
         return git_repos
 
@@ -153,10 +125,10 @@ class GitActivityTracker:
     def get_repo_name(self) -> str:
         """Get the repository name from git remote or directory name"""
         try:
-            # Try to get from remote URL
+
             remote_url = self._run_git_command(["remote", "get-url", "origin"])
             if remote_url:
-                # Extract repo name from URL
+
                 if remote_url.endswith(".git"):
                     remote_url = remote_url[:-4]
                 repo_name = remote_url.split("/")[-1]
@@ -164,30 +136,28 @@ class GitActivityTracker:
         except:
             pass
 
-        # Fallback to directory name
         return os.path.basename(self.repo_path)
 
     def get_all_branches(self) -> List[str]:
         """Get all branches in the repository"""
         try:
-            # Get all branches (local and remote)
+
             output = self._run_git_command(["branch", "-a"])
             branches = []
 
             for line in output.split("\n"):
                 line = line.strip()
                 if line and not line.startswith("*"):
-                    # Clean up branch names
+
                     branch = line.replace("remotes/origin/", "").replace("remotes/", "")
                     if branch not in branches and branch != "HEAD":
                         branches.append(branch)
                 elif line.startswith("*"):
-                    # Current branch
+
                     branch = line[1:].strip()
                     if branch not in branches:
                         branches.append(branch)
 
-            # Remove duplicates and sort
             branches = list(set(branches))
             self.debug_log(f"Found branches: {branches}")
             return branches
@@ -209,14 +179,12 @@ class GitActivityTracker:
 
         all_commits = {}
 
-        # Git log format: hash|author_name|author_email|date|subject
         log_format = "--pretty=format:%H|%an|%ae|%ai|%s"
 
         for branch in branches:
             try:
                 self.debug_log(f"Getting commits for branch: {branch}")
 
-                # Build git log command
                 cmd = [
                     "log",
                     log_format,
@@ -241,7 +209,6 @@ class GitActivityTracker:
 
                     commit_hash, author_name, author_email, date_str, subject = parts
 
-                    # Skip if we've already seen this commit
                     if commit_hash in all_commits:
                         continue
 
@@ -259,7 +226,6 @@ class GitActivityTracker:
 
         self.debug_log(f"Total unique commits found: {len(all_commits)}")
 
-        # Filter by author
         filtered_commits = []
         username_lower = username.lower()
 
@@ -267,7 +233,6 @@ class GitActivityTracker:
             author_name = commit_data["author_name"].lower()
             author_email = commit_data["author_email"].lower()
 
-            # Check if this commit is by the target user
             is_match = False
             if username_lower in author_name or author_name == username_lower:
                 is_match = True
@@ -279,7 +244,7 @@ class GitActivityTracker:
             if is_match:
                 commit_date = pendulum.from_format(
                     commit_data["date"],
-                    "YYYY-MM-DD HH:mm:ss Z",  # '2025-07-09 10:57:06 +0200'
+                    "YYYY-MM-DD HH:mm:ss Z",
                 )
                 commit = Commit(
                     commit_date=commit_date,
@@ -290,7 +255,6 @@ class GitActivityTracker:
 
         self.debug_log(f"Commits after filtering by author: {len(filtered_commits)}")
 
-        # Sort by date (newest first)
         return sorted(filtered_commits, key=lambda x: x.commit_date, reverse=True)
 
     def get_git_daily_work(
@@ -317,7 +281,6 @@ class GitActivityTracker:
         if not commits:
             return f"No git activity found for {username} in {repo_name} during the specified period."
 
-        # Generate report
         daily_work_summary = f"# Git Activity Report for {username}\n\n"
         daily_work_summary += f"**Repository:** {repo_name}\n"
         daily_work_summary += f"**Period:** {target_date_range.start.format('YYYY-MM-DD')} to {target_date_range.end.format('YYYY-MM-DD')}\n"
@@ -331,7 +294,6 @@ class GitActivityTracker:
         daily_work_summary += "\n## Summary\n\n"
         daily_work_summary += f"- **Total Commits**: {len(commits)}\n"
 
-        # Group commits by day
         commits_by_day = {}
         for commit in commits:
             day = commit.commit_date.format("YYYY-MM-DD")
@@ -354,7 +316,7 @@ class GitActivityTracker:
     ) -> Tuple[str, str, List[Commit], Optional[str]]:
         """Process a single repository and return results for thread-safe processing"""
         try:
-            # Create a tracker for this repository
+
             temp_tracker = GitActivityTracker(repo_path=repo_path, debug=self.debug)
 
             repo_name = temp_tracker.get_repo_name()
@@ -383,7 +345,6 @@ class GitActivityTracker:
         )
         self.debug_log(f"Repository paths: {repo_paths}")
 
-        # Generate combined report
         combined_report = f"# Git Activity Report for {username}\n\n"
         combined_report += f"**Period:** {target_date_range.start.format('YYYY-MM-DD')} to {target_date_range.end.format('YYYY-MM-DD')}\n"
         combined_report += f"**Repositories:** {len(repo_paths)} repositories\n\n"
@@ -392,11 +353,10 @@ class GitActivityTracker:
         all_commits_by_day = {}
         repo_summaries = []
 
-        # Process repositories concurrently using ThreadPoolExecutor
-        max_workers = min(len(repo_paths), 10)  # Limit to 10 concurrent workers
+        max_workers = min(len(repo_paths), 10)
 
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            # Submit all repository processing tasks
+
             future_to_repo = {
                 executor.submit(
                     self._process_single_repo,
@@ -427,7 +387,6 @@ class GitActivityTracker:
 
                     total_commits += len(commits)
 
-                    # Aggregate commits by day
                     for commit in commits:
                         day = commit.commit_date.format("YYYY-MM-DD")
                         if day not in all_commits_by_day:
@@ -439,7 +398,6 @@ class GitActivityTracker:
 
                     repo_summaries.append(f"- **{repo_name}**: {len(commits)} commits")
 
-        # Add summary section
         combined_report += "## Summary\n\n"
         combined_report += f"- **Total Commits**: {total_commits}\n"
         combined_report += f"- **Total Repositories**: {len(repo_paths)}\n\n"
