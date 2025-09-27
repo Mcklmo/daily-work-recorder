@@ -166,7 +166,7 @@ class GitActivityTracker(ActivityTracker):
             self.debug_log("Failed to get branches, using current branch only")
             return ["HEAD"]
 
-    def get_commits_for_repo(
+    def filter_commits(
         self,
         username: str,
         since: str,
@@ -179,51 +179,45 @@ class GitActivityTracker(ActivityTracker):
             branches = self.get_all_branches()
 
         all_commits = {}
-
         log_format = "--pretty=format:%H|%an|%ae|%ai|%s"
 
         for branch in branches:
-            try:
-                self.debug_log(f"Getting commits for branch: {branch}")
+            self.debug_log(f"Getting commits for branch: {branch}")
 
-                cmd = [
-                    "log",
-                    log_format,
-                    f"--since={since}",
-                    f"--until={until}",
-                    "--all" if branch == "HEAD" else branch,
-                ]
+            cmd = [
+                "log",
+                log_format,
+                f"--since={since}",
+                f"--until={until}",
+                "--all" if branch == "HEAD" else branch,
+            ]
 
-                output = self._run_git_command(cmd)
+            output = self._run_git_command(cmd)
 
-                if not output:
-                    self.debug_log(f"No commits found for branch {branch}")
+            if not output:
+                self.debug_log(f"No commits found for branch {branch}")
+                continue
+
+            for line in output.split("\n"):
+                if not line.strip():
                     continue
 
-                for line in output.split("\n"):
-                    if not line.strip():
-                        continue
+                parts = line.split("|", 4)
+                if len(parts) != 5:
+                    continue
 
-                    parts = line.split("|", 4)
-                    if len(parts) != 5:
-                        continue
+                commit_hash, author_name, author_email, date_str, subject = parts
 
-                    commit_hash, author_name, author_email, date_str, subject = parts
+                if commit_hash in all_commits:
+                    continue
 
-                    if commit_hash in all_commits:
-                        continue
-
-                    all_commits[commit_hash] = {
-                        "hash": commit_hash,
-                        "author_name": author_name,
-                        "author_email": author_email,
-                        "date": date_str,
-                        "subject": subject,
-                    }
-
-            except Exception as e:
-                self.debug_log(f"Error getting commits for branch {branch}: {e}")
-                continue
+                all_commits[commit_hash] = {
+                    "hash": commit_hash,
+                    "author_name": author_name,
+                    "author_email": author_email,
+                    "date": date_str,
+                    "subject": subject,
+                }
 
         self.debug_log(f"Total unique commits found: {len(all_commits)}")
 
@@ -277,7 +271,7 @@ class GitActivityTracker(ActivityTracker):
         repo_name = self.get_repo_name()
         print(f"Processing repository: {repo_name}")
 
-        commits = self.get_commits_for_repo(username, since, until)
+        commits = self.filter_commits(username, since, until)
 
         if not commits:
             return f"No git activity found for {username} in {repo_name} during the specified period."
@@ -312,22 +306,28 @@ class GitActivityTracker(ActivityTracker):
 
         return daily_work_summary
 
-    def _process_single_repo(
-        self, repo_path: str, username: str, since: str, until: str
-    ) -> Tuple[str, str, List[Commit], Optional[str]]:
+    def get_commits(
+        self,
+        repo_path: str,
+        username: str,
+        since: str,
+        until: str,
+    ) -> tuple[str, list[Commit]]:
         """Process a single repository and return results for thread-safe processing"""
         try:
-
             temp_tracker = GitActivityTracker(repo_path=repo_path, debug=self.debug)
 
-            repo_name = temp_tracker.get_repo_name()
-            commits = temp_tracker.get_commits_for_repo(username, since, until)
-
-            return repo_path, repo_name, commits, None
+            return (
+                temp_tracker.get_repo_name(),
+                temp_tracker.filter_commits(
+                    username,
+                    since,
+                    until,
+                ),
+            )
 
         except Exception as e:
-            self.debug_log(f"Error processing repository {repo_path}: {e}")
-            return repo_path, os.path.basename(repo_path), [], str(e)
+            raise Exception(f"Error getting commits for repository {repo_path}: {e}")
 
     def get_multiple_repos_daily_work(
         self,
@@ -365,7 +365,7 @@ class GitActivityTracker(ActivityTracker):
 
             future_to_repo = {
                 executor.submit(
-                    self._process_single_repo,
+                    self.get_commits,
                     repo_path,
                     username,
                     since,
@@ -380,29 +380,23 @@ class GitActivityTracker(ActivityTracker):
                 repo_path = future_to_repo[future]
                 print(f"Processing repository: {os.path.basename(repo_path)}")
 
-                repo_path_result, repo_name, commits, error = future.result()
+                repo_name, commits = future.result()
 
-                if error:
-                    self.debug_log(f"Error processing repository {repo_path}: {error}")
-                    repo_summaries.append(
-                        f"- **{repo_name}**: Error processing repository"
-                    )
-                else:
-                    if not commits:
-                        continue
+                if not commits:
+                    continue
 
-                    total_commits += len(commits)
+                total_commits += len(commits)
 
-                    for commit in commits:
-                        day = commit.commit_date.format("YYYY-MM-DD")
-                        if day not in all_commits_by_day:
-                            all_commits_by_day[day] = 0
+                for commit in commits:
+                    day = commit.commit_date.format("YYYY-MM-DD")
+                    if day not in all_commits_by_day:
+                        all_commits_by_day[day] = 0
 
-                        all_commits_by_day[day] += 1
+                    all_commits_by_day[day] += 1
 
-                        all_commits.append((day, repo_name, str(commit)))
+                    all_commits.append((day, repo_name, str(commit)))
 
-                    repo_summaries.append(f"- **{repo_name}**: {len(commits)} commits")
+                repo_summaries.append(f"- **{repo_name}**: {len(commits)} commits")
 
         combined_report += "## Summary\n\n"
         combined_report += f"- **Total Commits**: {total_commits}\n"
