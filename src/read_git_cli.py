@@ -329,18 +329,14 @@ class GitActivityTracker(ActivityTracker):
         except Exception as e:
             raise Exception(f"Error getting commits for repository {repo_path}: {e}")
 
-    def get_multiple_repos_daily_work(
+    def get_daily_work(
         self,
         username: str,
         work_repository_path: str,
         target_date_range: pendulum.Interval,
     ) -> dict[str, str]:
         """Generate a combined daily work report from multiple git repositories"""
-
-        since = target_date_range.start.format("YYYY-MM-DD")
-        until = target_date_range.end.format("YYYY-MM-DD")
-
-        self.debug_log(f"Starting get_multiple_repos_daily_work for user: {username}")
+        self.debug_log(f"Starting get_daily_work for user: {username}")
         self.debug_log(
             f"Date range: {target_date_range.start} to {target_date_range.end}"
         )
@@ -354,27 +350,26 @@ class GitActivityTracker(ActivityTracker):
         combined_report = f"# Git Activity Report for {username}\n\n"
         combined_report += f"**Period:** {target_date_range.start.format('YYYY-MM-DD')} to {target_date_range.end.format('YYYY-MM-DD')}\n"
         combined_report += f"**Repositories:** {len(repo_paths)} repositories\n\n"
-
         total_commits = 0
         all_commits_by_day = {}
         repo_summaries = []
-
         max_workers = min(len(repo_paths), 10)
+        start_date = target_date_range.start.to_date_string()
+        end_date = target_date_range.end.to_date_string()
 
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
-
             future_to_repo = {
                 executor.submit(
                     self.get_commits,
                     repo_path,
                     username,
-                    since,
-                    until,
+                    start_date,
+                    end_date,
                 ): repo_path
                 for repo_path in repo_paths
             }
 
-            all_commits = []
+            all_commits: list[tuple[str, str, str]] = []
 
             for future in as_completed(future_to_repo):
                 repo_path = future_to_repo[future]
@@ -388,7 +383,7 @@ class GitActivityTracker(ActivityTracker):
                 total_commits += len(commits)
 
                 for commit in commits:
-                    day = commit.commit_date.format("YYYY-MM-DD")
+                    day = commit.commit_date.to_date_string()
                     if day not in all_commits_by_day:
                         all_commits_by_day[day] = 0
 
@@ -401,16 +396,14 @@ class GitActivityTracker(ActivityTracker):
         combined_report += "## Summary\n\n"
         combined_report += f"- **Total Commits**: {total_commits}\n"
         combined_report += f"- **Total Repositories**: {len(repo_paths)}\n\n"
-
         all_commits = sorted(all_commits, key=lambda x: x[2], reverse=True)
-
         structured_commits: dict[str, list[tuple[str, str]]] = {}
 
-        for day, commit_repo_name, commit in all_commits:
+        for day, commit_repo_name, commit_str in all_commits:
             if day not in structured_commits:
                 structured_commits[day] = []
 
-            structured_commits[day].append((commit_repo_name, commit))
+            structured_commits[day].append((commit_repo_name, commit_str))
 
         report_by_day = {}
 
@@ -437,15 +430,19 @@ class GitActivityTracker(ActivityTracker):
                 combined_report += f"- **{day}**: {all_commits_by_day[day]} commits\n"
 
         if total_commits == 0:
-            return f"No git activity found for {username} in any repositories during the specified period."
+            return {}
 
-        filename = f"git_report_multi_{target_date_range.start.format('YYYY-MM-DD')}_to_{target_date_range.end.format('YYYY-MM-DD')}.md"
+        filename = f"git_report_multi_{target_date_range.start.to_date_string()}_to_{target_date_range.end.to_date_string()}.md"
         with open(filename, "w") as f:
             f.write(combined_report)
 
         return report_by_day
 
-    def create_day_report(self, day: str, repo_commits: List[Tuple[str, str]]) -> str:
+    def create_day_report(
+        self,
+        day: str,
+        repo_commits: List[Tuple[str, str]],
+    ) -> str:
         day_report = f"# Git history for {day}\n\n"
         for repo_name, commit in repo_commits:
             repo_name_fmt = repo_name.ljust(45)

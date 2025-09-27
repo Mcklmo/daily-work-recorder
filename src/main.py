@@ -1,5 +1,5 @@
 import os
-from calculate_work_hours.calc import calculate_work_hours
+from calculate_work_hours.calc import report_daily_work
 from write_to_notion import NotionWorkRecorder
 from read_git_cli import GitActivityTracker
 from logger import logger
@@ -25,7 +25,7 @@ def main() -> None:
         notion_token=notion_token, database_id=notion_database_id
     )
     activity_tracker = GitActivityTracker()
-    calculate_work_hours(
+    report_daily_work(
         UserInputCLI(),
         work_recorder,
         activity_tracker,

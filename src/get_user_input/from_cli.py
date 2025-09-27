@@ -1,3 +1,4 @@
+import pendulum
 from calculate_work_hours.calc import UserInputGetter, UserInput
 import argparse
 
@@ -47,32 +48,41 @@ class UserInputCLI(UserInputGetter):
             "--date",
             type=str,
             help="Date of the work (YYYY-MM-DD) (default: empty)",
-            default="",
+            default=None,
         )
         parser.add_argument(
             "-s",
             "--start-date",
             type=str,
             help="Start date of the work (YYYY-MM-DD) (default: empty)",
-            default="",
+            default=None,
         )
         parser.add_argument(
             "-e",
             "--end-date",
             type=str,
             help="End date of the work (YYYY-MM-DD) (default: empty)",
-            default="",
+            default=None,
         )
 
         args = parser.parse_args()
+        date_format = "YYYY-MM-DD"
 
         return UserInput(
-            date=args.date,
+            date=pendulum.from_format(args.date, date_format) if args.date else None,
             work_repository_path=args.work_repository_path,
             git_username=args.git_username,
             notion_project=args.notion_project,
             notion_user_name=args.notion_user_name,
             duration_hours=args.duration_hours,
-            start_date=args.start_date,
-            end_date=args.end_date,
+            start_date=(
+                pendulum.from_format(args.start_date, date_format)
+                if args.start_date
+                else None
+            ),
+            end_date=(
+                pendulum.from_format(args.end_date, date_format)
+                if args.end_date
+                else None
+            ),
         )
