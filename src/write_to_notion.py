@@ -1,14 +1,14 @@
 import pendulum
-from typing import Dict, List, Optional, Any
+from typing import Dict, Optional, Any
 from notion_client import Client
 import dotenv
 import requests
-from logger import logger
+from calculate_work_hours.calc import WorkRecorder
 
 dotenv.load_dotenv()
 
 
-class NotionWorkRecorder:
+class NotionWorkRecorder(WorkRecorder):
     def __init__(self, notion_token: str, database_id: str, debug: bool = False):
         self.debug = debug
         self.notion = Client(auth=notion_token)
@@ -45,10 +45,15 @@ class NotionWorkRecorder:
             filter={"property": "title", "rich_text": {"equals": project_name}},
         )
 
+        if not isinstance(all_projects, dict):
+            raise Exception("No projects found")
+
         return all_projects["results"][0]["id"]
 
     def get_user_id(self, user_name: str) -> str:
         all_users = self.notion.users.list()
+        if not isinstance(all_users, dict):
+            raise Exception("No users found")
 
         for user in all_users["results"]:
             if user["name"] == user_name:
@@ -63,7 +68,7 @@ class NotionWorkRecorder:
         duration: int,
         project: str,
         user_name: str,
-    ) -> Dict[str, Any]:
+    ) -> None:
         """
         Create a work record in Notion
 
@@ -137,5 +142,3 @@ class NotionWorkRecorder:
             raise Exception(data.get("message"))
 
         response.raise_for_status()
-
-        return data

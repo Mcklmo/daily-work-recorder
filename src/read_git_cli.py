@@ -4,6 +4,7 @@ import pendulum
 from typing import Any, Optional, List, Tuple
 import json
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from calculate_work_hours.calc import ActivityTracker
 from logger import logger
 
 
@@ -26,7 +27,7 @@ class Commit:
         return f"`{self.commit_date.to_datetime_string()}` ({self.commit_hash}) **{self.commit_msg}**"
 
 
-class GitActivityTracker:
+class GitActivityTracker(ActivityTracker):
     def __init__(self, repo_path: Optional[str] = None, debug: bool = False):
         self.debug = debug
         self.repo_path = self._find_git_repo(repo_path)
@@ -330,10 +331,10 @@ class GitActivityTracker:
 
     def get_multiple_repos_daily_work(
         self,
-        repo_paths: List[str],
         username: str,
+        work_repository_path: str,
         target_date_range: pendulum.Interval,
-    ) -> str:
+    ) -> dict[str, str]:
         """Generate a combined daily work report from multiple git repositories"""
 
         since = target_date_range.start.format("YYYY-MM-DD")
@@ -343,6 +344,11 @@ class GitActivityTracker:
         self.debug_log(
             f"Date range: {target_date_range.start} to {target_date_range.end}"
         )
+
+        repo_paths = self.find_git_repos_in_directory(work_repository_path, 3)
+        if not repo_paths:
+            raise Exception(f"No git repositories found in path {work_repository_path}")
+
         self.debug_log(f"Repository paths: {repo_paths}")
 
         combined_report = f"# Git Activity Report for {username}\n\n"
