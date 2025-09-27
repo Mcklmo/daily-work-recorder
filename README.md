@@ -27,36 +27,47 @@ pip install -r requirements.txt
 
 ## Usage
 
+### All supported arguments
+
 ```bash
 python3 src/main.py --help
-```
 
-### Supported Arguments
+usage: main.py [-h] -r WORK_REPOSITORY_PATH -g GIT_USERNAME -p NOTION_PROJECT -n NOTION_USER_NAME [-dh DURATION_HOURS] [-d DATE] [-s START_DATE] [-e END_DATE]
+               [-dw DAYS_OF_WEEK]
 
-```bash
-usage: main.py [-h] -r WORK_REPOSITORY_PATH -g GIT_USERNAME -p NOTION_PROJECT -n NOTION_USER_NAME [-dh DURATION_HOURS] [-d DATE]
-
-Generate Git activity reports for Notion
+BCT Git activity tracker for Notion
 
 options:
   -h, --help            show this help message and exit
   -r WORK_REPOSITORY_PATH, --work-repository-path WORK_REPOSITORY_PATH
-                        Path to the work repository
+                        Path to the work repository. This will be scanned recursively for git repositories. Each git repository will be scanned for commits. Each commit will be added to the work record.
   -g GIT_USERNAME, --git-username GIT_USERNAME
-                        git username to filter by
+                        git username to filter by. This will be used to filter the git repositories.
   -p NOTION_PROJECT, --notion-project NOTION_PROJECT
-                        Notion project name
+                        Notion project name. This will be used to find the project in our Time Registration Codes database and add it to the work record.
   -n NOTION_USER_NAME, --notion-user-name NOTION_USER_NAME
-                        Notion user name
+                        Notion user name. This will be used to find your user in the Notion database and add it to the work record.
   -dh DURATION_HOURS, --duration-hours DURATION_HOURS
                         Work duration in hours (default: 0)
-  -d DATE, --date DATE  Date of the work (YYYY-MM-DD) (default: today)
+  -d DATE, --date DATE  Date of the work (YYYY-MM-DD) (default: empty)
+  -s START_DATE, --start-date START_DATE
+                        Start date of the work (YYYY-MM-DD) (default: empty)
+  -e END_DATE, --end-date END_DATE
+                        End date of the work (YYYY-MM-DD) (default: empty)
+  -dw DAYS_OF_WEEK, --days-of-week DAYS_OF_WEEK
+                        Days of the week to include in the work (default: 0,1,2,3,4,5,6)
 ```
 
 ### Example Usage
 
 ```bash
 python3 src/main.py --date 2025-07-18 --work-repository-path /Users/moritzmarcushonscheidt/Projects/ --git-username mcklmo --notion-project "Heads" --notion-user-name "Moritz Marcus Hönscheidt" --duration-hours 0
+```
+
+### Usage with start and end date
+
+```bash
+python3 src/main.py --start-date 2025-09-28 --end-date 2025-09-28 --work-repository-path /Users/moritzmarcushonscheidt/Projects/ --git-username mcklmo --notion-project "Heads" --notion-user-name "Moritz Marcus Hönscheidt" --duration-hours 0
 ```
 
 ### Example Output

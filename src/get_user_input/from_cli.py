@@ -12,7 +12,7 @@ class UserInputCLI(UserInputGetter):
             "-r",
             "--work-repository-path",
             type=str,
-            help="Path to the work repository. This will be scanned for git repositories.",
+            help="Path to the work repository. This will be scanned recursively for git repositories. Each git repository will be scanned for commits. Each commit will be added to the work record.",
             required=True,
         )
         parser.add_argument(
