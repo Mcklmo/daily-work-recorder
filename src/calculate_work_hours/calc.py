@@ -15,6 +15,7 @@ class UserInput:
         duration_hours: int,
         start_date: pendulum.DateTime | None,
         end_date: pendulum.DateTime | None,
+        days_of_week: list[pendulum.WeekDay],
     ):
         if date and (start_date or end_date):
             raise Exception("Date and start/end date cannot be used together")
@@ -37,6 +38,7 @@ class UserInput:
         self.duration_hours = duration_hours
         self.start_date: pendulum.DateTime = start_date
         self.end_date: pendulum.DateTime = end_date
+        self.days_of_week = days_of_week
 
 
 class UserInputGetter:
@@ -87,6 +89,14 @@ def report_daily_work(
 
     for target_date in pendulum.interval(args.start_date, args.end_date).range("days"):
         target_date_str = target_date.to_date_string()
+        if target_date.weekday() not in args.days_of_week:
+            if target_date_str in report:
+                logger.warning(
+                    f"Ignoring work[{report[target_date_str]}] found for date {target_date_str} because {target_date.weekday()} is not a weekday"
+                )
+
+            continue
+
         if target_date_str not in report:
             logger.error(f"No work found for date {target_date_str}")
             continue

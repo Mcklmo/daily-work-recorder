@@ -64,6 +64,13 @@ class UserInputCLI(UserInputGetter):
             help="End date of the work (YYYY-MM-DD) (default: empty)",
             default=None,
         )
+        parser.add_argument(
+            "-dw",
+            "--days-of-week",
+            type=str,
+            help="Days of the week to include in the work (default: 0,1,2,3,4,5,6)",
+            default="0,1,2,3,4,5,6",
+        )
 
         args = parser.parse_args()
         date_format = "YYYY-MM-DD"
@@ -85,4 +92,7 @@ class UserInputCLI(UserInputGetter):
                 if args.end_date
                 else None
             ),
+            days_of_week=[
+                pendulum.WeekDay(int(day)) for day in args.days_of_week.split(",")
+            ],
         )

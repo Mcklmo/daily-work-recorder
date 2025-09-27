@@ -336,11 +336,6 @@ class GitActivityTracker(ActivityTracker):
         target_date_range: pendulum.Interval,
     ) -> dict[str, str]:
         """Generate a combined daily work report from multiple git repositories"""
-        self.debug_log(f"Starting get_daily_work for user: {username}")
-        self.debug_log(
-            f"Date range: {target_date_range.start} to {target_date_range.end}"
-        )
-
         repo_paths = self.find_git_repos_in_directory(work_repository_path, 3)
         if not repo_paths:
             raise Exception(f"No git repositories found in path {work_repository_path}")
