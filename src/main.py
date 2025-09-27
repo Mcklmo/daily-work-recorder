@@ -1,5 +1,6 @@
 import os
 from calculate_work_hours.calc import report_daily_work
+from write_to_mock import MockWorkRecorder
 from write_to_notion import NotionWorkRecorder
 from read_git_cli import GitActivityTracker
 from logger import logger
@@ -27,7 +28,7 @@ def main() -> None:
     activity_tracker = GitActivityTracker()
     report_daily_work(
         UserInputCLI(),
-        work_recorder,
+        MockWorkRecorder(logger),
         activity_tracker,
         logger,
     )
